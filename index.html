@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Simulador NFL</title>
   <meta name="description" content="Probabilidades de victoria, hándicaps, totales y picks de jugadores de la NFL con datos reales y miles de simulaciones.">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icono.svg">
+  <meta name="theme-color" content="#0d1b2e">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&display=swap">
   <link rel="stylesheet" href="estilos.css">
@@ -13,7 +16,7 @@
   <header class="cabecera">
     <div class="ancho-pagina cabecera-dentro">
       <div class="marca">
-        <h1>Simulador <span>NFL</span></h1>
+        <h1><img src="icono.svg" alt="" width="40" height="40">Simulador <span>NFL</span></h1>
         <p id="estado-datos">Cargando resultados reales…</p>
       </div>
       <div class="controles">
@@ -45,7 +48,7 @@
 
   <main id="vista" class="ancho-pagina"><p class="tenue">Cargando…</p></main>
 
-  <dialog id="dialogo"><button class="cerrar" id="cerrar" aria-label="Cerrar">×</button><div id="dialogo-cuerpo"></div></dialog>
+  <dialog id="dialogo"><div class="dialogo-cab"><h2 id="dialogo-titulo">Partido</h2><button class="cerrar" id="cerrar" aria-label="Cerrar">Cerrar ×</button></div><div id="dialogo-cuerpo"></div></dialog>
   <div id="globo" class="globo" hidden></div>
 
   <footer class="pie ancho-pagina">
