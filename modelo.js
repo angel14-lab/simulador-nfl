@@ -357,7 +357,7 @@
     }
     if (ry >= 15) r.carrera = ajustada(JUG.carrera, ry, fr);
     if (cy >= 15) { r.recepcion = ajustada(JUG.recepcion, cy, fp); r.atrapadas = ajustada(JUG.atrapadas, re, 1); }
-    if ((jug.p !== 'QB' && ry + cy >= 20) || (jug.p === 'QB' && ry >= 10)) r.td = (td * 3.9 + 8 * (ry + cy) * JUG.tdPorYarda) / 11.9 * ft;
+    if ((jug.p !== 'QB' && ry + cy >= 20) || (jug.p === 'QB' && (ry >= 10 || r.pase))) r.td = (td * 3.9 + 8 * (ry + cy) * JUG.tdPorYarda) / 11.9 * ft;
     return r.pase || r.carrera || r.recepcion || r.td ? r : null;
   }
 
