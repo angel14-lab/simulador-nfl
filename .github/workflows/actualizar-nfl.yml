@@ -1,0 +1,35 @@
+name: Actualizar datos NFL
+
+# Cada día baja de nflverse los resultados, la eficiencia por jugada y el parte de
+# lesiones (que cambia de miércoles a viernes) y guarda la copia que usa el sitio.
+on:
+  schedule:
+    - cron: '23 10 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  actualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Bajar los partidos y validar el modelo
+        run: |
+          node herramientas/actualizar-datos.js
+          node herramientas/ajustar.js
+      - name: Guardar si hubo cambios
+        run: |
+          if git diff --quiet -- datos; then
+            echo "Sin datos nuevos."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add datos
+          git commit -m "Datos NFL: actualización automática"
+          git push

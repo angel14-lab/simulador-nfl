@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simulador NFL · probabilidades con datos reales</title>
+  <meta name="description" content="Probabilidades de victoria, hándicaps y totales de la NFL calculados con resultados reales y miles de simulaciones.">
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <header class="cabecera">
+    <div class="marca">
+      <h1>Simulador NFL</h1>
+      <p id="estado-datos" class="tenue">Cargando resultados reales…</p>
+    </div>
+    <div class="controles">
+      <label>Expectativa de puntos
+        <select id="fuente">
+          <option value="modelo">Modelo estadístico</option>
+          <option value="mezcla">Mezcla modelo + mercado</option>
+          <option value="mercado">Línea del mercado</option>
+        </select>
+      </label>
+      <label>Simulaciones por partido
+        <select id="nsims">
+          <option value="1000">1 000</option>
+          <option value="10000" selected>10 000</option>
+          <option value="50000">50 000</option>
+          <option value="100000">100 000</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <nav class="pestanas" role="tablist">
+    <button role="tab" data-vista="jornada" aria-selected="true">Jornada</button>
+    <button role="tab" data-vista="libre" aria-selected="false">Cruce libre</button>
+    <button role="tab" data-vista="equipos" aria-selected="false">Equipos</button>
+    <button role="tab" data-vista="precision" aria-selected="false">Precisión y método</button>
+  </nav>
+
+  <main id="vista"><p class="tenue">Cargando…</p></main>
+
+  <dialog id="dialogo"><button class="cerrar" id="cerrar" aria-label="Cerrar">×</button><div id="dialogo-cuerpo"></div></dialog>
+  <div id="globo" class="globo" hidden></div>
+
+  <footer class="pie tenue">
+    Datos: <a href="https://github.com/nflverse/nfldata" target="_blank" rel="noopener">nflverse</a> (resultados, calendario y líneas de cierre).
+    Las probabilidades son estimaciones estadísticas, no garantías ni consejos de apuesta.
+  </footer>
+
+  <noscript><p style="padding:24px">Esta página necesita JavaScript.</p></noscript>
+  <script src="modelo.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
