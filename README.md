@@ -3,20 +3,21 @@
 Sitio estático que estima los resultados de los partidos de la NFL con datos reales y miles de simulaciones.
 Publicado con GitHub Pages en https://angel14-lab.github.io/simulador-nfl/
 
-- **Jornada**: probabilidad de victoria, marcador medio y hándicap estimado de cada partido, junto a la línea real del mercado.
-- **Detalle del partido**: probabilidad de cubrir cualquier hándicap, más/menos de cualquier total, cuotas justas y distribución completa de resultados.
+- **Jornada**: probabilidad de victoria, marcador medio, hándicap estimado, línea real del mercado y los tres picks más probables de cada partido.
+- **Mejores picks**: los picks más probables de toda la jornada (ganador, hándicap, total, yardas, recepciones y touchdowns de jugadores) con su cuota justa.
+- **Detalle del partido**: picks, anotadores probables, hándicaps y totales a cualquier línea, proyección de cada jugador con calculadora de líneas, comparación de equipos y parte de lesiones.
 - **Cruce libre**: cualquier equipo contra cualquier otro, en casa o en campo neutral.
-- **Equipos**: calificaciones actuales de ataque y defensa.
-- **Precisión y método**: comparación del modelo con los resultados reales y con el mercado desde 2016.
+- **Equipos**: calificaciones de ataque, defensa y quarterback, marca contra el hándicap y contra el total.
+- **Precisión y método**: comparación con los resultados reales y con el mercado desde 2016, y calibración de las proyecciones de jugadores.
 
 ## Datos
 
 Todo viene de [nflverse](https://github.com/nflverse): resultados, calendario, líneas de cierre y quarterbacks
-([nfldata](https://github.com/nflverse/nfldata)), eficiencia por jugada (EPA) y parte oficial de lesiones
+([nfldata](https://github.com/nflverse/nfldata)), eficiencia por jugada (EPA), parte oficial de lesiones y estadísticas de jugadores
 ([nflverse-data](https://github.com/nflverse/nflverse-data)).
 
 - Al abrirse, la página baja en vivo los partidos, las líneas y los quarterbacks anunciados.
-- La eficiencia y las lesiones no se pueden bajar desde el navegador, así que salen de la copia de `datos/`,
+- La eficiencia, las lesiones y los jugadores no se pueden bajar desde el navegador, así que salen de la copia de `datos/`,
   que el flujo `.github/workflows/actualizar-nfl.yml` renueva cada día (también se puede lanzar a mano desde Actions).
 
 Para renovar la copia a mano:
@@ -39,6 +40,7 @@ puntos por equipo y el viento previsto. Validado de 2016 a 2025: acierta el gana
 | `modelo.js` | Calificaciones de ataque/defensa y simulador Monte Carlo serie por serie. |
 | `app.js`, `estilos.css`, `index.html` | La interfaz. |
 | `herramientas/ajustar.js` | Valida el modelo contra resultados reales (`--buscar` prueba otros parámetros). |
+| `herramientas/validar-jugadores.js` | Comprueba las proyecciones de jugadores contra partidos reales (116 000 predicciones, 2023-2025). |
 | `herramientas/actualizar-datos.js` | Actualiza la copia local de los datos (partidos, eficiencia y lesiones). |
 
 Las probabilidades son estimaciones estadísticas: el modelo no lee noticias ni distingue a una estrella lesionada de un suplente.

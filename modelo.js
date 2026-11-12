@@ -274,9 +274,97 @@
     return a == null || b == null ? null : a / (a + b);
   }
 
+
+  // ================= Jugadores =================
+  // Ajustes validados con herramientas/validar-jugadores.js (88 000 predicciones, 2023-2025).
+  var JUG = {
+    olvido: 0.82, pesoAnterior: 0.5, maxPartidos: 10, minPartidos: 3,
+    //        centro, regresión al centro, desviación = a + b × proyección
+    pase:     { c: 225, s: 0.45, a: 78,   b: 0 },
+    carrera:  { c: 42,  s: 0.15, a: 17,   b: 0.29 },
+    recepcion:{ c: 38,  s: 0.15, a: 14,   b: 0.38 },
+    atrapadas:{ c: 3.4, s: 0.13, a: 1.05, b: 0.29 },
+    tdPorYarda: 0.00674, tdPasePorYarda: 0.00644, rival: 0.5
+  };
+  // Columnas de cada partido de un jugador en datos/jugadores.json
+  var COL = { t: 0, s: 1, riv: 2, pa: 3, py: 4, pt: 5, ca: 6, ry: 7, rt: 8, tg: 9, re: 10, cy: 11, ct: 12 };
+
+  function lnGamma(x) {
+    var c = [76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5];
+    var y = x, t = x + 5.5, s = 1.000000000190015, i;
+    t -= (x + 0.5) * Math.log(t);
+    for (i = 0; i < 6; i++) s += c[i] / ++y;
+    return -t + Math.log(2.5066282746310005 * s / x);
+  }
+  // Función gamma incompleta regularizada P(a, x).
+  function gammaP(a, x) {
+    if (x <= 0) return 0;
+    var i, pre = Math.exp(-x + a * Math.log(x) - lnGamma(a));
+    if (x < a + 1) {
+      var s = 1 / a, d = s, ap = a;
+      for (i = 0; i < 300; i++) { ap++; d *= x / ap; s += d; if (Math.abs(d) < Math.abs(s) * 1e-10) break; }
+      return s * pre;
+    }
+    var b = x + 1 - a, c = 1e30, dd = 1 / b, h = dd, an, del;
+    for (i = 1; i < 300; i++) {
+      an = -i * (i - a); b += 2; dd = an * dd + b; if (Math.abs(dd) < 1e-30) dd = 1e-30;
+      c = b + an / c; if (Math.abs(c) < 1e-30) c = 1e-30; dd = 1 / dd; del = dd * c; h *= del;
+      if (Math.abs(del - 1) < 1e-10) break;
+    }
+    return 1 - pre * h;
+  }
+  // Las probabilidades muy altas fallan algo más de lo previsto (jugadores que salen lesionados): se moderan.
+  function templar(p) { return p > 0.7 ? 0.7 + (p - 0.7) * 0.85 : p; }
+  // P(estadística ≥ umbral) con una distribución gamma de media m y desviación sd.
+  function probAlMenos(m, sd, umbral) {
+    if (!(m > 0)) return 0;
+    var forma = (m / sd) * (m / sd), escala = sd * sd / m;
+    return templar(1 - gammaP(forma, Math.max(0, umbral - 0.5) / escala));
+  }
+  function probPoisson(media, k) { // P(X ≥ k)
+    var p = 0, t = Math.exp(-media), i;
+    for (i = 0; i < k; i++) { p += t; t *= media / (i + 1); }
+    return 1 - p;
+  }
+  // Cuánto concede la defensa rival frente al promedio de la liga (1 = promedio), amortiguado.
+  function factorRival(datos, rival, clave) {
+    var d = datos && datos.defensas && datos.defensas[rival], l = datos && datos.liga;
+    if (!d || d.g < 3 || !l || !l.g || !l[clave]) return 1;
+    return 1 + JUG.rival * ((d[clave] / d.g) / (l[clave] / l.g) - 1);
+  }
+  /* Proyección de un jugador para su próximo partido. jug.j = partidos (más reciente al final).
+     Devuelve por estadística {m: media, sd: desviación}; td y tdPase son medias de Poisson. */
+  function proyectar(jug, temporada, datos, rival) {
+    var h = jug.j, n = h.length, pesos = [], sw = 0, i, g, w;
+    for (i = 0; i < n && i < JUG.maxPartidos; i++) {
+      g = h[n - 1 - i]; w = Math.pow(JUG.olvido, i) * (g[COL.t] === temporada ? 1 : JUG.pesoAnterior);
+      pesos.push([g, w]); sw += w;
+    }
+    if (pesos.length < JUG.minPartidos) return null;
+    function media(f) { var s = 0; pesos.forEach(function (x) { s += x[1] * f(x[0]); }); return s / sw; }
+    function ajustada(cfg, bruto, factor) {
+      var m = Math.max(0.1, (cfg.c + (1 - cfg.s) * (bruto - cfg.c)) * factor);
+      return { m: m, sd: cfg.a + cfg.b * m };
+    }
+    var fp = factorRival(datos, rival, 'py'), fr = factorRival(datos, rival, 'ry'), ft = factorRival(datos, rival, 'td');
+    var pa = media(function (x) { return x[COL.pa]; }), py = media(function (x) { return x[COL.py]; }), pt = media(function (x) { return x[COL.pt]; });
+    var ry = media(function (x) { return x[COL.ry]; }), cy = media(function (x) { return x[COL.cy]; }), re = media(function (x) { return x[COL.re]; });
+    var td = media(function (x) { return x[COL.rt] + x[COL.ct]; });
+    var r = { partidos: pesos.length, deEstaTemporada: pesos.filter(function (x) { return x[0][COL.t] === temporada; }).length };
+    if (jug.p === 'QB' && pa >= 20) {
+      r.pase = ajustada(JUG.pase, py, fp);
+      r.tdPase = (pt * 3.9 + 4 * (JUG.pase.c + (1 - JUG.pase.s) * (py - JUG.pase.c)) * JUG.tdPasePorYarda) / 7.9 * ft;
+    }
+    if (ry >= 15) r.carrera = ajustada(JUG.carrera, ry, fr);
+    if (cy >= 15) { r.recepcion = ajustada(JUG.recepcion, cy, fp); r.atrapadas = ajustada(JUG.atrapadas, re, 1); }
+    if ((jug.p !== 'QB' && ry + cy >= 20) || (jug.p === 'QB' && ry >= 10)) r.td = (td * 3.9 + 8 * (ry + cy) * JUG.tdPorYarda) / 11.9 * ft;
+    return r.pase || r.carrera || r.recepcion || r.td ? r : null;
+  }
+
   return {
     PARAMS: PARAMS, SIM: SIM, ALIAS: ALIAS, leerCSV: leerCSV, prepararPartidos: prepararPartidos,
     calificar: calificar, predecir: predecir, esperar: esperar, simular: simular, cubrir: cubrir, totales: totales,
-    azar: azar, semillaDe: semillaDe, implicita: implicita, sinMargen: sinMargen
+    azar: azar, semillaDe: semillaDe, JUG: JUG, COL: COL, gammaP: gammaP, probAlMenos: probAlMenos, probPoisson: probPoisson,
+    proyectar: proyectar, factorRival: factorRival, implicita: implicita, sinMargen: sinMargen
   };
 });
