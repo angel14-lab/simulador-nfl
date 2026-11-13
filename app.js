@@ -323,7 +323,8 @@
 
     if (reg) {
       var pc = picksCongelados(p, reg), nOk = pc.filter(function (x) { return x.ok === true; }).length, nMal = pc.filter(function (x) { return x.ok === false; }).length;
-      h += panel('picks') + '<p class="aviso">Pronóstico congelado antes del inicio (' + new Date(reg.inicio).toLocaleString('es', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) + ' en tu hora). ' +
+      h += panel('picks') + '<p class="aviso">' + (reg.reconstruido ? 'Estos picks no quedaron guardados antes del partido: se rehicieron después con lo que se sabía antes de jugarse, así que pueden diferir un poco de los que viste. ' :
+        'Pronóstico congelado antes del inicio (' + new Date(reg.inicio).toLocaleString('es', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) + ' en tu hora). ') +
         (reg.calificado ? 'Resultado: ' + nOk + ' aciertos y ' + nMal + ' fallos.' : p.jugado ? 'El partido terminó; los aciertos se marcan cuando se publican las estadísticas de jugadores.' : 'El partido ya empezó: estos picks ya no cambian.') + '</p>' +
         '<div class="dos"><section class="tarjeta"><h3>Picks del partido</h3><ul class="picks">' + pc.filter(function (x) { return x.tipo !== 'td'; }).map(function (x) { return filaPick(x); }).join('') + '</ul></section>' +
         '<section class="tarjeta"><h3>Anotador de touchdown</h3><ul class="picks">' + pc.filter(function (x) { return x.tipo === 'td'; }).map(function (x) { return filaPick(x); }).join('') + '</ul></section></div></div>';
@@ -558,32 +559,33 @@
   // ---------- vista: aciertos ----------
   function vistaAciertos() {
     var nombres = { partido: 'Ganador y hándicap', total: 'Puntos del partido y de equipo', td: 'Anotador de touchdown', qb: 'Pases de touchdown del quarterback' };
-    var porTipo = {}, mejores = { n: 0, ok: 0, p: 0 }, todo = { n: 0, ok: 0, p: 0 }, semanas = {}, pendientes = 0;
+    var porTipo = {}, mejores = { n: 0, ok: 0, p: 0 }, todo = { n: 0, ok: 0, p: 0 }, guardados = { n: 0, ok: 0, p: 0 }, rehechos = { n: 0, ok: 0, p: 0 }, semanas = {}, pendientes = 0;
     function sumar(o, k) { o.n++; o.p += k.p; if (k.ok) o.ok++; }
     Object.keys(E.hist).forEach(function (id) {
       var r = E.hist[id];
       if (!r.calificado) { if (Date.now() >= Date.parse(r.inicio) - P.MARGEN_CONGELAR) pendientes++; return; }
       var validos = r.picks.filter(function (k) { return k.ok === true || k.ok === false; });
-      validos.forEach(function (k) { sumar(porTipo[k.t] = porTipo[k.t] || { n: 0, ok: 0, p: 0 }, k); sumar(todo, k); });
+      validos.forEach(function (k) { sumar(porTipo[k.t] = porTipo[k.t] || { n: 0, ok: 0, p: 0 }, k); sumar(todo, k); sumar(r.reconstruido ? rehechos : guardados, k); });
       if (validos.length) sumar(mejores, validos[0]);
       (semanas[r.temporada + ' · semana ' + r.semana] = semanas[r.temporada + ' · semana ' + r.semana] || []).push(r);
     });
     function cifra(t, o) { return '<div class="cifra"><div class="t">' + t + '</div><div class="v">' + (o.n ? pct(o.ok / o.n, 0) : '—') + '</div><div class="s">' + o.ok + ' de ' + o.n + (o.n ? ' · el modelo esperaba ' + pct(o.p / o.n, 0) : '') + '</div></div>'; }
     var h = '<h2>Aciertos y fallos</h2><p class="tenue">Cada pronóstico se guarda antes de que empiece el partido y ya no se toca. Al terminar se compara con lo que pasó. Si el modelo está bien calibrado, el porcentaje de aciertos se parece al que esperaba.</p>';
     if (!todo.n) {
-      vista.innerHTML = h + '<p class="aviso">Todavía no hay partidos calificados. El registro empezó en la semana 10 de 2026' + (pendientes ? ' y hay ' + pendientes + ' partidos esperando resultado' : '') +
+      vista.innerHTML = h + '<p class="aviso">Todavía no hay partidos calificados' + (pendientes ? ' y hay ' + pendientes + ' partidos esperando resultado' : '') +
         '. Los aciertos aparecen cuando se publican el marcador y las estadísticas de jugadores, normalmente al día siguiente.</p>';
       return;
     }
-    h += '<div class="cifras">' + cifra('Todos los picks', todo) + cifra('Mejor pick de cada partido', mejores) + '</div>' +
+    h += '<div class="cifras">' + cifra('Todos los picks', todo) + cifra('Mejor pick de cada partido', mejores) + cifra('Guardados antes del partido', guardados) + cifra('Rehechos después del partido', rehechos) + '</div>' +
+      (rehechos.n ? '<p class="tenue">Los rehechos son partidos que se jugaron antes de que existiera el registro (o sin que se guardaran a tiempo). Se calcularon con lo que se sabía antes de cada partido, pero la medida más limpia es la de los guardados.</p>' : '') +
       '<section class="tarjeta"><h3>Por tipo de pick</h3><div class="desborde"><table><tr><th>Tipo</th><th>Picks</th><th>Acertados</th><th>Acierto real</th><th>Lo que esperaba el modelo</th></tr>' +
       Object.keys(nombres).filter(function (t) { return porTipo[t]; }).map(function (t) { var o = porTipo[t];
         return '<tr><td>' + nombres[t] + '</td><td>' + o.n + '</td><td>' + o.ok + '</td><td>' + pct(o.ok / o.n, 0) + '</td><td>' + pct(o.p / o.n, 0) + '</td></tr>'; }).join('') + '</table></div></section>';
-    Object.keys(semanas).sort().reverse().forEach(function (s) {
+    Object.keys(semanas).sort(function (x, y) { var a = semanas[x][0], b = semanas[y][0]; return b.temporada - a.temporada || b.semana - a.semana; }).forEach(function (s) {
       h += '<section class="tarjeta" style="margin-top:14px"><h3>' + s + '</h3><div class="desborde"><table><tr><th>Partido</th><th>Final</th><th class="izq">Mejor pick</th><th>Probabilidad</th><th>Resultado</th><th>Aciertos del partido</th></tr>' +
         semanas[s].map(function (r) {
           var k = r.picks[0], ok = r.picks.filter(function (x) { return x.ok === true; }).length, n = r.picks.filter(function (x) { return x.ok === true || x.ok === false; }).length;
-          return '<tr><td>' + escudo(r.visita) + ' en ' + escudo(r.local) + '</td><td>' + (r.final ? r.final[0] + '–' + r.final[1] : '—') + '</td><td class="izq">' + esc(k.q) + ' ' + esc(k.que) + '</td><td>' + pct(k.p, 0) + '</td><td>' +
+          return '<tr><td>' + escudo(r.visita) + ' en ' + escudo(r.local) + '</td><td>' + (r.final ? r.final[0] + '–' + r.final[1] : '—') + '</td><td class="izq">' + esc(k.q) + ' ' + esc(k.que) + (r.reconstruido ? ' <span class="etiqueta">rehecho</span>' : '') + '</td><td>' + pct(k.p, 0) + '</td><td>' +
             (k.ok === true ? '<span class="etiqueta bien">✓ acertó</span>' : k.ok === false ? '<span class="etiqueta mal">✗ falló</span>' : '<span class="etiqueta">anulado</span>') + '</td><td>' + ok + ' de ' + n + '</td></tr>';
         }).join('') + '</table></div></section>';
     });

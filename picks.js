@@ -31,20 +31,24 @@
   }
   function parte(lesiones, p) { return lesiones && lesiones.temporada === p.temporada && lesiones.semanas ? lesiones.semanas[p.semana] || null : null; }
 
-  // Jugadores con proyección para un partido por jugar. ctx: {jug, porEquipo, semanas, lesiones, titular}
-  function jugadoresDe(ctx, p, lado) {
-    if (!ctx.jug || p.jugado || p.temporada !== ctx.jug.temporada) return [];
+  /* Jugadores con proyección para un partido. ctx: {jug, porEquipo, semanas, lesiones, titular}
+     Con reconstruir = true sirve para un partido ya jugado: usa solo lo ocurrido antes de esa jornada
+     (sin ajuste por la defensa rival, que ya incluiría el propio partido). */
+  function jugadoresDe(ctx, p, lado, reconstruir) {
+    if (!ctx.jug || p.temporada !== ctx.jug.temporada || (p.jugado && !reconstruir)) return [];
+    function antes(g) { return !p.jugado || g[0] < p.temporada || (g[0] === p.temporada && g[1] < p.semana); }
     var eq = lado === 'l' ? p.local : p.visita, rival = lado === 'l' ? p.visita : p.local, sem = parte(ctx.lesiones, p), estado = {};
     ((sem && sem[eq]) || []).forEach(function (x) { estado[x.n] = x.e; });
-    var semanas = Object.keys(ctx.semanas[eq] || {}).map(Number).sort(function (a, b) { return a - b; });
+    var semanas = Object.keys(ctx.semanas[eq] || {}).map(Number).filter(function (s) { return !p.jugado || s < p.semana; }).sort(function (a, b) { return a - b; });
     var limite = semanas.length > 1 ? semanas[semanas.length - 2] : 0;
     var titular = (lado === 'l' ? p.qbLocalId : p.qbVisitaId) || (ctx.titular[eq] || {}).id;
     var lista = [];
     (ctx.porEquipo[eq] || []).forEach(function (j) {
-      var ult = j.j[j.j.length - 1];
+      var previos = p.jugado ? j.j.filter(antes) : j.j, ult = previos[previos.length - 1];
+      if (!ult) return;
       if (j.p === 'QB' ? j.id !== titular : (ult[0] !== ctx.jug.temporada || ult[1] < limite)) return; // suplentes y ausentes recientes
       if (estado[j.n] === 'Out' || estado[j.n] === 'Doubtful') return;
-      var pr = M.proyectar(j, ctx.jug.temporada, ctx.jug, rival);
+      var pr = M.proyectar({ p: j.p, j: previos }, ctx.jug.temporada, p.jugado ? null : ctx.jug, rival);
       if (pr) lista.push({ j: j, eq: eq, pr: pr, duda: estado[j.n] === 'Questionable' });
     });
     function valor(x) { return (x.pr.pase ? 1000 : 0) + (x.pr.carrera ? x.pr.carrera.m : 0) + (x.pr.recepcion ? x.pr.recepcion.m : 0); }
@@ -67,7 +71,7 @@
 
   /* Picks en los mercados habituales de una casa de apuestas, de más a menos probable.
      Cada uno lleva «m», la descripción exacta del mercado, para poder calificarlo al terminar el partido. */
-  function picksDe(ctx, p, sim, esp) {
+  function picksDe(ctx, p, sim, esp, reconstruir) {
     var lista = [];
     function poner(tipo, eq, quien, que, prob, m, extra) {
       var k = { tipo: tipo, eq: eq, quien: quien, que: que, prob: prob, m: m };
@@ -87,7 +91,7 @@
     [['v', p.visita], ['l', p.local]].forEach(function (x) {
       var l = lineaEquipo(p, x[0], esp), q = masDe(sim, x[0], l);
       poner('total', x[1], x[1] + (q >= 0.5 ? ' más de ' : ' menos de ') + l, 'puntos del equipo', Math.max(q, 1 - q), { m: 'equipo', eq: x[1], mas: q >= 0.5, linea: l });
-      jugadoresDe(ctx, p, x[0]).forEach(function (j) {
+      jugadoresDe(ctx, p, x[0], reconstruir).forEach(function (j) {
         if (j.pr.td != null) poner('td', j.eq, j.j.n, 'anota touchdown', M.probPoisson(j.pr.td, 1), { m: 'td', id: j.j.id }, { duda: j.duda, dos: M.probPoisson(j.pr.td, 2) });
         if (j.pr.tdPase != null) {
           var dos = M.probPoisson(j.pr.tdPase, 2);
