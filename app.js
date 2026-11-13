@@ -1,7 +1,7 @@
 /* Interfaz del simulador NFL. El cálculo vive en modelo.js. */
 (function () {
   'use strict';
-  var M = window.ModeloNFL;
+  var M = window.ModeloNFL, P = window.PicksNFL;
   var URL_VIVO = 'https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv';
   var PRIMERA_TEMPORADA_VISIBLE = 2016;
 
@@ -64,20 +64,17 @@
     var nada = function () { return null; }, json = function (u) { return traer(u, 15000).then(JSON.parse).catch(nada); };
     return Promise.all([
       traer(URL_VIVO, 9000).catch(nada), traer('datos/partidos.csv', 15000).catch(nada),
-      json('datos/lesiones.json'), json('datos/jugadores.json'), json('datos/calibracion-jugadores.json')
+      json('datos/lesiones.json'), json('datos/jugadores.json'), json('datos/calibracion-jugadores.json'), json('datos/historial.json')
     ]).then(function (r) {
       if (!r[0] && !r[1]) throw new Error('sin conexión con los datos');
       var copia = r[1] ? M.leerCSV(r[1]) : null;
       E.origen = r[0] ? 'en vivo desde nflverse' : 'copia guardada en el sitio';
-      E.lesiones = r[2]; E.jug = r[3]; E.calib = r[4];
+      E.lesiones = r[2]; E.jug = r[3]; E.calib = r[4]; E.hist = (r[5] && r[5].partidos) || {};
       E.partidos = M.prepararPartidos(r[0] ? M.leerCSV(r[0]) : copia, 2010, r[0] ? copia : null);
       if (!E.partidos.length) throw new Error('sin partidos');
       E.estado = M.calificar(E.partidos);
-      if (E.jug) E.jug.jugadores.forEach(function (j) {
-        (E.jugPorEquipo[j.e] = E.jugPorEquipo[j.e] || []).push(j);
-        var s = E.semanasEquipo[j.e] = E.semanasEquipo[j.e] || {};
-        j.j.forEach(function (g) { if (g[2] && g[0] === E.jug.temporada) s[g[1]] = 1; });
-      });
+      var ind = P.indexar(E.jug);
+      E.ctx = { jug: E.jug, porEquipo: ind.porEquipo, semanas: ind.semanas, lesiones: E.lesiones, titular: E.estado.titular };
       var jugados = E.partidos.filter(function (p) { return p.jugado; });
       var ultimo = jugados[jugados.length - 1];
       E.ultima = E.partidos[E.partidos.length - 1].temporada;
@@ -135,76 +132,33 @@
     return E.partidos.filter(function (p) { return p.jugado && ((p.local === a && p.visita === b) || (p.local === b && p.visita === a)); }).slice(-5).reverse();
   }
 
-  // ---------- jugadores y picks ----------
-  function parte(p) { var L = E.lesiones; return L && L.temporada === p.temporada && L.semanas ? L.semanas[p.semana] || null : null; }
-  // Jugadores con proyección para un partido por jugar de la temporada en curso.
-  function jugadoresDe(p, lado) {
-    if (!E.jug || p.jugado || p.temporada !== E.jug.temporada) return [];
-    var eq = lado === 'l' ? p.local : p.visita, rival = lado === 'l' ? p.visita : p.local, sem = parte(p), estado = {};
-    ((sem && sem[eq]) || []).forEach(function (x) { estado[x.n] = x.e; });
-    var semanas = Object.keys(E.semanasEquipo[eq] || {}).map(Number).sort(function (a, b) { return a - b; });
-    var limite = semanas.length > 1 ? semanas[semanas.length - 2] : 0;
-    var titular = (lado === 'l' ? p.qbLocalId : p.qbVisitaId) || (E.estado.titular[eq] || {}).id;
-    var lista = [];
-    (E.jugPorEquipo[eq] || []).forEach(function (j) {
-      var ult = j.j[j.j.length - 1];
-      if (j.p === 'QB' ? j.id !== titular : (ult[0] !== E.jug.temporada || ult[1] < limite)) return; // suplentes y ausentes recientes
-      if (estado[j.n] === 'Out' || estado[j.n] === 'Doubtful') return;
-      var pr = M.proyectar(j, E.jug.temporada, E.jug, rival);
-      if (pr) lista.push({ j: j, eq: eq, pr: pr, duda: estado[j.n] === 'Questionable' });
-    });
-    return lista.sort(function (a, b) { return valor(b) - valor(a); });
-    function valor(x) { return (x.pr.pase ? 1000 : 0) + (x.pr.carrera ? x.pr.carrera.m : 0) + (x.pr.recepcion ? x.pr.recepcion.m : 0); }
-  }
-  function probJugador(pr, k, umbral) {
-    if (pr[k] == null) return null;
-    return ESTAD[k].poisson ? M.probPoisson(pr[k], umbral) : M.probAlMenos(pr[k].m, pr[k].sd, umbral);
-  }
-  // Línea de puntos de un equipo que suele ofrecer la casa: la que se deduce del hándicap y del total.
-  function lineaEquipo(p, lado, esp) {
-    var x = p.linea != null && p.lineaTotal != null ? (p.lineaTotal + (lado === 'l' ? 1 : -1) * p.linea) / 2 : (lado === 'l' ? esp.local : esp.visita);
-    return Math.floor(x) + 0.5;
-  }
-  function masDe(sim, lado, linea) {
-    var a = lado === 'l' ? sim.local : sim.visita, c = 0, i;
-    for (i = 0; i < sim.n; i++) if (a[i] > linea) c++;
-    return c / sim.n;
-  }
-  /* Picks de un partido en los mercados habituales de una casa de apuestas (ganador, hándicap, total,
-     puntos por equipo, anotador de touchdown y pases de touchdown del quarterback), de más a menos probable. */
+  // ---------- jugadores y picks (el cálculo está en picks.js) ----------
+  function parte(p) { return P.parte(E.lesiones, p); }
+  function jugadoresDe(p, lado) { return P.jugadoresDe(E.ctx, p, lado); }
+  var probJugador = P.probJugador, lineaEquipo = P.lineaEquipo, masDe = P.masDe;
   function picksDe(p) {
-    var r = simPartido(p), s = r.sim, lista = [], juego = p.visita + ' en ' + p.local;
-    function poner(tipo, eq, quien, que, prob, extra) {
-      var k = { tipo: tipo, eq: eq, quien: quien, que: que, prob: prob, juego: juego, p: p, id: p.id + '|' + quien + '|' + que };
-      if (extra) Object.keys(extra).forEach(function (x) { k[x] = extra[x]; });
-      lista.push(k);
-    }
-    var ef = s.pLocal >= s.pVisita ? p.local : p.visita;
-    poner('partido', ef, nombre(ef), 'gana el partido', Math.max(s.pLocal, s.pVisita));
-    if (p.linea != null) {
-      var c = M.cubrir(s, -p.linea), lc = c.local >= c.visita;
-      poner('partido', lc ? p.local : p.visita, textoHandicap(lc ? p.local : p.visita, lc ? -p.linea : p.linea), 'hándicap', Math.max(c.local, c.visita) / (1 - c.nulo || 1));
-    }
-    if (p.lineaTotal != null) {
-      var t = M.totales(s, p.lineaTotal), mas = t.mas >= t.menos;
-      poner('total', null, (mas ? 'Más de ' : 'Menos de ') + p.lineaTotal, 'puntos en el partido', Math.max(t.mas, t.menos) / (1 - t.nulo || 1));
-    }
-    [['v', p.visita], ['l', p.local]].forEach(function (x) {
-      var l = lineaEquipo(p, x[0], r.esp), q = masDe(s, x[0], l);
-      poner('total', x[1], x[1] + (q >= 0.5 ? ' más de ' : ' menos de ') + l, 'puntos del equipo', Math.max(q, 1 - q));
-      jugadoresDe(p, x[0]).forEach(function (j) {
-        if (j.pr.td != null) poner('td', j.eq, j.j.n, 'anota touchdown', M.probPoisson(j.pr.td, 1), { duda: j.duda, dos: M.probPoisson(j.pr.td, 2) });
-        if (j.pr.tdPase != null) {
-          var dos = M.probPoisson(j.pr.tdPase, 2);
-          poner('qb', j.eq, j.j.n, (dos >= 0.5 ? 'más de' : 'menos de') + ' 1.5 pases de touchdown', Math.max(dos, 1 - dos), { duda: j.duda });
-        }
-      });
-    });
-    return lista.sort(function (a, b) { return b.prob - a.prob; });
+    var r = simPartido(p), juego = p.visita + ' en ' + p.local;
+    return P.picksDe(E.ctx, p, r.sim, r.esp).map(function (k) { k.juego = juego; k.p = p; return k; });
+  }
+  /* Pronóstico congelado de un partido: lo guarda la actualización automática antes del inicio y ya no cambia.
+     Se usa desde 10 minutos antes de empezar; hasta entonces la página muestra el cálculo del momento. */
+  function congelado(p) {
+    var reg = E.hist[p.id];
+    if (!reg) return null;
+    return p.jugado || Date.now() >= Date.parse(reg.inicio) - P.MARGEN_CONGELAR ? reg : null;
+  }
+  function enJuego(p) { var ini = P.inicio(p); return !p.jugado && ini != null && Date.now() >= ini; }
+  function picksCongelados(p, reg) {
+    var juego = p.visita + ' en ' + p.local;
+    return reg.picks.map(function (k) { return { tipo: k.t, eq: k.eq, quien: k.q, que: k.que, prob: k.p, ok: k.ok, calificado: !!reg.calificado, juego: juego, p: p }; });
+  }
+  function marca(k) {
+    if (!k.calificado) return '';
+    return k.ok === true ? ' <span class="etiqueta bien">✓ acertó</span>' : k.ok === false ? ' <span class="etiqueta mal">✗ falló</span>' : ' <span class="etiqueta">anulado</span>';
   }
   function filaPick(k, conJuego, indice) {
     return '<li class="pick"' + (indice != null ? ' data-i="' + indice + '" tabindex="0"' : '') + '><span class="pick-prob">' + pct(k.prob, 0) + '</span><span class="pick-cuerpo">' + (k.eq ? escudo(k.eq) + ' ' : '') + '<b>' + esc(k.quien) + '</b> ' + esc(k.que) +
-      (k.duda ? ' <span class="etiqueta">en duda</span>' : '') + (k.dos != null ? ' <span class="tenue">· 2 o más: ' + pct(k.dos, 0) + '</span>' : '') + (conJuego ? '<br><span class="tenue">' + esc(k.juego) + '</span>' : '') +
+      marca(k) + (k.duda ? ' <span class="etiqueta">en duda</span>' : '') + (k.dos != null ? ' <span class="tenue">· 2 o más: ' + pct(k.dos, 0) + '</span>' : '') + (conJuego ? '<br><span class="tenue">' + esc(k.juego) + '</span>' : '') +
       '</span><span class="pick-cuota"><small>cuota justa</small>' + cuota(k.prob) + '</span></li>';
   }
 
@@ -347,11 +301,12 @@
       return '<div class="lado ' + clase + '">' + escudo(eq, true) + '<div><div class="duelo-nombre">' + esc(nombre(eq)) + '</div><div class="tenue">' + res.marca + ' · QB ' + esc(quien || '—') + '</div></div>' +
         '<div class="duelo-prob">' + pct(prob) + '<small>gana · cuota justa ' + cuota(prob) + '</small></div></div>';
     }
+    var fz = p ? congelado(p) : null;
     var h = '<p class="tenue">' + (p ? esc(fecha(p)) + (p.estadio ? ' · ' + esc(p.estadio) : '') + (p.neutral ? ' · campo neutral' : '') : (c.neutral ? 'Campo neutral' : 'En casa de ' + esc(nombre(c.local)))) + '</p>' +
-      '<div class="duelo">' + lado(c.visita, c.qbVisita, rv, sim.pVisita, 'v') +
-      '<div class="centro"><div class="marcador">' + n1(sim.mediaVisita) + ' – ' + n1(sim.mediaLocal) + '</div><div class="tenue">marcador medio · total ' + n1(sim.mediaVisita + sim.mediaLocal) + '</div></div>' +
-      lado(c.local, c.qbLocal, rl, sim.pLocal, 'l') + '</div>' +
-      '<div class="barra alta"><i class="v" style="flex:' + sim.pVisita + '"></i><i class="l" style="flex:' + sim.pLocal + '"></i></div>';
+      '<div class="duelo">' + lado(c.visita, c.qbVisita, rv, fz ? fz.pV : sim.pVisita, 'v') +
+      '<div class="centro"><div class="marcador">' + n1(fz ? fz.mV : sim.mediaVisita) + ' – ' + n1(fz ? fz.mL : sim.mediaLocal) + '</div><div class="tenue">marcador medio · total ' + n1(fz ? fz.mV + fz.mL : sim.mediaVisita + sim.mediaLocal) + '</div></div>' +
+      lado(c.local, c.qbLocal, rl, fz ? fz.pL : sim.pLocal, 'l') + '</div>' +
+      '<div class="barra alta"><i class="v" style="flex:' + (fz ? fz.pV : sim.pVisita) + '"></i><i class="l" style="flex:' + (fz ? fz.pL : sim.pLocal) + '"></i></div>';
     if (p && p.jugado) h += '<p><span class="etiqueta">Resultado real</span> <b>' + p.visita + ' ' + p.ptsVisita + ' – ' + p.ptsLocal + ' ' + p.local + '</b>' + (p.prorroga ? ' (prórroga)' : '') +
       ' <span class="tenue">· lo de abajo es lo que se estimaba antes del partido</span></p>';
     h += '<p class="tenue">' + n.toLocaleString('es') + ' simulaciones · ' + ({ modelo: 'modelo estadístico', mezcla: 'mezcla modelo + mercado', mercado: 'línea del mercado' })[esp.fuente] +
@@ -360,12 +315,19 @@
 
     // El detalle se reparte en secciones para no tener que recorrer una página larga.
     var hayJug = !!(p && !p.jugado && (jugadoresDe(p, 'v').length || jugadoresDe(p, 'l').length)), htmlQB = '';
-    var secciones = (p && !p.jugado ? [['picks', 'Picks']] : []).concat([['mercados', 'Hándicap y puntos']], hayJug ? [['jugadores', 'Jugadores']] : [], [['equipos', 'Equipos y ajustes']]);
+    var reg = p ? congelado(p) : null;
+    var secciones = (p && (!p.jugado || reg) ? [['picks', reg && reg.calificado ? 'Picks y aciertos' : 'Picks']] : []).concat([['mercados', 'Hándicap y puntos']], hayJug ? [['jugadores', 'Jugadores']] : [], [['equipos', 'Equipos y ajustes']]);
     if (!secciones.some(function (x) { return x[0] === c.pestana; })) c.pestana = secciones[0][0];
     function panel(id) { return '<div class="panel" data-panel="' + id + '"' + (id === c.pestana ? '' : ' hidden') + '>'; }
     h += '<div class="segmento secciones" role="tablist">' + secciones.map(function (x) { return '<button role="tab" data-sec="' + x[0] + '" aria-selected="' + (x[0] === c.pestana) + '">' + x[1] + '</button>'; }).join('') + '</div>';
 
-    if (p && !p.jugado) {
+    if (reg) {
+      var pc = picksCongelados(p, reg), nOk = pc.filter(function (x) { return x.ok === true; }).length, nMal = pc.filter(function (x) { return x.ok === false; }).length;
+      h += panel('picks') + '<p class="aviso">Pronóstico congelado antes del inicio (' + new Date(reg.inicio).toLocaleString('es', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) + ' en tu hora). ' +
+        (reg.calificado ? 'Resultado: ' + nOk + ' aciertos y ' + nMal + ' fallos.' : p.jugado ? 'El partido terminó; los aciertos se marcan cuando se publican las estadísticas de jugadores.' : 'El partido ya empezó: estos picks ya no cambian.') + '</p>' +
+        '<div class="dos"><section class="tarjeta"><h3>Picks del partido</h3><ul class="picks">' + pc.filter(function (x) { return x.tipo !== 'td'; }).map(function (x) { return filaPick(x); }).join('') + '</ul></section>' +
+        '<section class="tarjeta"><h3>Anotador de touchdown</h3><ul class="picks">' + pc.filter(function (x) { return x.tipo === 'td'; }).map(function (x) { return filaPick(x); }).join('') + '</ul></section></div></div>';
+    } else if (p && !p.jugado) {
       var picks = picksDe(p), fuertes = picks.filter(function (x) { return x.tipo !== 'td'; }), tds = picks.filter(function (x) { return x.tipo === 'td'; }).slice(0, 8);
       var ayuda = '<p class="tenue">Cuota justa = lo mínimo que debería pagar tu casa para que la apuesta valga la pena según el modelo.</p>';
       h += panel('picks') + '<div class="dos"><section class="tarjeta"><h3>Mejores picks del partido</h3><ul class="picks">' + fuertes.map(function (x) { return filaPick(x); }).join('') + '</ul>' + ayuda + '</section>' +
@@ -541,7 +503,13 @@
         var d = new Date(p.fecha + 'T12:00:00').toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
         h += (dia ? '</div>' : '') + '<h2 class="dia">' + d.charAt(0).toUpperCase() + d.slice(1) + '</h2><div class="rejilla">'; dia = p.fecha;
       }
-      if (p.jugado) {
+      var reg = congelado(p), pV = reg ? reg.pV : s.pVisita, pL = reg ? reg.pL : s.pLocal, mV = reg ? reg.mV : s.mediaVisita, mL = reg ? reg.mL : s.mediaLocal;
+      if (reg) {
+        var pc = picksCongelados(p, reg), m0 = pc[0], ok = pc.filter(function (x) { return x.ok === true; }).length, mal = pc.filter(function (x) { return x.ok === false; }).length;
+        pie = '<span class="mejor' + (m0.ok === true ? ' bien' : m0.ok === false ? ' mal' : '') + '"><span>Mejor pick</span><b>' + esc(m0.tipo === 'td' || m0.tipo === 'qb' ? abreviar(m0.quien) : m0.quien) + ' ' + esc(m0.que) + '</b><i>' + pct(m0.prob, 0) +
+          (reg.calificado ? (m0.ok === true ? ' · ✓ acertó' : m0.ok === false ? ' · ✗ falló' : ' · anulado') : ' · congelado') + '</i></span>' +
+          (reg.calificado ? '<span class="chip"><b>' + ok + '</b> aciertos · <b>' + mal + '</b> fallos</span>' : '<span class="chip">Aciertos al terminar</span>');
+      } else if (p.jugado) {
         var gano = p.ptsLocal > p.ptsVisita ? 'l' : p.ptsLocal < p.ptsVisita ? 'v' : 'e', fav = s.pLocal >= s.pVisita ? 'l' : 'v';
         pie = gano === 'e' ? '<span class="etiqueta">Empate</span>' : gano === fav ? '<span class="etiqueta bien">✓ acertó el favorito</span>' : '<span class="etiqueta mal">✗ ganó el no favorito</span>';
       } else {
@@ -554,10 +522,10 @@
         return '<span class="eq">' + escudo(eq) + '<span><span class="nombre">' + esc(nombre(eq)) + '</span><span class="sub">' + resumenEquipo(eq).marca + ' · ' + esc(apellido(qb(p, lado))) + '</span></span></span>' +
           '<span class="pct">' + (p.jugado ? '<b class="final">' + puntos + '</b>' : '') + pct(prob, 0) + '</span>';
       }
-      h += '<button class="partido" data-i="' + i + '"><div class="arriba"><span>' + esc(p.hora ? p.hora + ' ET' : '') + (p.neutral ? ' · campo neutral' : '') + '</span><span>' + (p.jugado ? 'Final' : 'Por jugar') + '</span></div>' +
-        '<div class="equipos">' + fila(p.visita, 'v', s.pVisita, p.ptsVisita) + fila(p.local, 'l', s.pLocal, p.ptsLocal) + '</div>' +
-        '<div class="barra" data-globo="' + p.visita + ' ' + pct(s.pVisita) + ' · ' + p.local + ' ' + pct(s.pLocal) + ' · empate ' + pct(s.pEmpate, 2) + '"><i class="v" style="flex:' + s.pVisita + '"></i><i class="l" style="flex:' + s.pLocal + '"></i></div>' +
-        '<div class="trio"><div><span>Marcador medio</span><b>' + n1(s.mediaVisita) + ' – ' + n1(s.mediaLocal) + '</b></div><div><span>Hándicap estimado</span><b>' + favorito(p, s.mediaLocal - s.mediaVisita) + '</b></div>' +
+      h += '<button class="partido" data-i="' + i + '"><div class="arriba"><span>' + esc(p.hora ? p.hora + ' ET' : '') + (p.neutral ? ' · campo neutral' : '') + '</span><span>' + (p.jugado ? 'Final' : enJuego(p) ? 'En juego' : 'Por jugar') + '</span></div>' +
+        '<div class="equipos">' + fila(p.visita, 'v', pV, p.ptsVisita) + fila(p.local, 'l', pL, p.ptsLocal) + '</div>' +
+        '<div class="barra" data-globo="' + p.visita + ' ' + pct(pV) + ' · ' + p.local + ' ' + pct(pL) + '"><i class="v" style="flex:' + pV + '"></i><i class="l" style="flex:' + pL + '"></i></div>' +
+        '<div class="trio"><div><span>Marcador medio</span><b>' + n1(mV) + ' – ' + n1(mL) + '</b></div><div><span>Hándicap estimado</span><b>' + favorito(p, mL - mV) + '</b></div>' +
         '<div><span>Mercado</span><b>' + (p.linea != null ? favorito(p, p.linea) + ' · ' + p.lineaTotal : '—') + '</b></div></div>' +
         '<div class="chips">' + pie + '</div></button>';
     });
@@ -568,7 +536,7 @@
 
   // ---------- vista: picks ----------
   function vistaPicks() {
-    var lista = partidosDeJornada().filter(function (p) { return !p.jugado; }), todos = [];
+    var lista = partidosDeJornada().filter(function (p) { return !p.jugado && !enJuego(p); }), todos = [];
     lista.forEach(function (p) { todos = todos.concat(picksDe(p)); });
     var filtros = [['todos', 'Todos'], ['partido', 'Ganador y hándicap'], ['total', 'Puntos'], ['td', 'Anotadores'], ['qb', 'Quarterbacks']];
     var ver = todos.filter(function (k) { return E.filtro === 'todos' || k.tipo === E.filtro; }).sort(function (a, b) { return b.prob - a.prob; }).slice(0, 50);
@@ -577,7 +545,7 @@
       (ver.length ? '<section class="tarjeta"><h2>Los picks más probables de la jornada</h2>' +
         '<p class="tenue">Solo mercados que ofrecen las casas: ganador, hándicap, puntos del partido y de cada equipo, anotador de touchdown y pases de touchdown del quarterback. A la derecha, la cuota justa: lo mínimo que debería pagar tu casa. Toca un pick para abrir su partido.</p>' +
         '<ul class="picks grande">' + ver.map(function (k, i) { return filaPick(k, true, i); }).join('') + '</ul></section>' :
-        '<p class="aviso">' + (lista.length ? 'No hay picks de este tipo para la jornada.' : 'Esta jornada ya se jugó. Elige una jornada por jugar para ver picks.') + '</p>') +
+        '<p class="aviso">' + (lista.length ? 'No hay picks de este tipo para la jornada.' : 'No quedan partidos por empezar en esta jornada. Mira sus resultados en la pestaña Aciertos.') + '</p>') +
       '<p class="aviso">Probabilidad alta no es lo mismo que apuesta buena: las casas ya pagan poco por lo probable. El hándicap y el total son los de cierre del mercado y pueden diferir medio punto de los de tu casa; dentro de cada partido puedes cambiar la línea.</p>';
     activarSelector();
     vista.querySelectorAll('[data-f]').forEach(function (b) { b.onclick = function () { E.filtro = b.getAttribute('data-f'); vistaPicks(); }; });
@@ -585,6 +553,41 @@
       var abrir = function () { abrirPartido(ver[Number(li.getAttribute('data-i'))].p); };
       li.onclick = abrir; li.onkeydown = function (ev) { if (ev.key === 'Enter') abrir(); };
     });
+  }
+
+  // ---------- vista: aciertos ----------
+  function vistaAciertos() {
+    var nombres = { partido: 'Ganador y hándicap', total: 'Puntos del partido y de equipo', td: 'Anotador de touchdown', qb: 'Pases de touchdown del quarterback' };
+    var porTipo = {}, mejores = { n: 0, ok: 0, p: 0 }, todo = { n: 0, ok: 0, p: 0 }, semanas = {}, pendientes = 0;
+    function sumar(o, k) { o.n++; o.p += k.p; if (k.ok) o.ok++; }
+    Object.keys(E.hist).forEach(function (id) {
+      var r = E.hist[id];
+      if (!r.calificado) { if (Date.now() >= Date.parse(r.inicio) - P.MARGEN_CONGELAR) pendientes++; return; }
+      var validos = r.picks.filter(function (k) { return k.ok === true || k.ok === false; });
+      validos.forEach(function (k) { sumar(porTipo[k.t] = porTipo[k.t] || { n: 0, ok: 0, p: 0 }, k); sumar(todo, k); });
+      if (validos.length) sumar(mejores, validos[0]);
+      (semanas[r.temporada + ' · semana ' + r.semana] = semanas[r.temporada + ' · semana ' + r.semana] || []).push(r);
+    });
+    function cifra(t, o) { return '<div class="cifra"><div class="t">' + t + '</div><div class="v">' + (o.n ? pct(o.ok / o.n, 0) : '—') + '</div><div class="s">' + o.ok + ' de ' + o.n + (o.n ? ' · el modelo esperaba ' + pct(o.p / o.n, 0) : '') + '</div></div>'; }
+    var h = '<h2>Aciertos y fallos</h2><p class="tenue">Cada pronóstico se guarda antes de que empiece el partido y ya no se toca. Al terminar se compara con lo que pasó. Si el modelo está bien calibrado, el porcentaje de aciertos se parece al que esperaba.</p>';
+    if (!todo.n) {
+      vista.innerHTML = h + '<p class="aviso">Todavía no hay partidos calificados. El registro empezó en la semana 10 de 2026' + (pendientes ? ' y hay ' + pendientes + ' partidos esperando resultado' : '') +
+        '. Los aciertos aparecen cuando se publican el marcador y las estadísticas de jugadores, normalmente al día siguiente.</p>';
+      return;
+    }
+    h += '<div class="cifras">' + cifra('Todos los picks', todo) + cifra('Mejor pick de cada partido', mejores) + '</div>' +
+      '<section class="tarjeta"><h3>Por tipo de pick</h3><div class="desborde"><table><tr><th>Tipo</th><th>Picks</th><th>Acertados</th><th>Acierto real</th><th>Lo que esperaba el modelo</th></tr>' +
+      Object.keys(nombres).filter(function (t) { return porTipo[t]; }).map(function (t) { var o = porTipo[t];
+        return '<tr><td>' + nombres[t] + '</td><td>' + o.n + '</td><td>' + o.ok + '</td><td>' + pct(o.ok / o.n, 0) + '</td><td>' + pct(o.p / o.n, 0) + '</td></tr>'; }).join('') + '</table></div></section>';
+    Object.keys(semanas).sort().reverse().forEach(function (s) {
+      h += '<section class="tarjeta" style="margin-top:14px"><h3>' + s + '</h3><div class="desborde"><table><tr><th>Partido</th><th>Final</th><th class="izq">Mejor pick</th><th>Probabilidad</th><th>Resultado</th><th>Aciertos del partido</th></tr>' +
+        semanas[s].map(function (r) {
+          var k = r.picks[0], ok = r.picks.filter(function (x) { return x.ok === true; }).length, n = r.picks.filter(function (x) { return x.ok === true || x.ok === false; }).length;
+          return '<tr><td>' + escudo(r.visita) + ' en ' + escudo(r.local) + '</td><td>' + (r.final ? r.final[0] + '–' + r.final[1] : '—') + '</td><td class="izq">' + esc(k.q) + ' ' + esc(k.que) + '</td><td>' + pct(k.p, 0) + '</td><td>' +
+            (k.ok === true ? '<span class="etiqueta bien">✓ acertó</span>' : k.ok === false ? '<span class="etiqueta mal">✗ falló</span>' : '<span class="etiqueta">anulado</span>') + '</td><td>' + ok + ' de ' + n + '</td></tr>';
+        }).join('') + '</table></div></section>';
+    });
+    vista.innerHTML = h + (pendientes ? '<p class="aviso">Partidos ya empezados o terminados que esperan sus estadísticas para calificarse: ' + pendientes + '.</p>' : '');
   }
 
   // ---------- vista: cruce libre ----------
@@ -702,7 +705,7 @@
   }
 
   // ---------- navegación ----------
-  var VISTAS = { jornada: vistaJornada, picks: vistaPicks, libre: vistaLibre, equipos: vistaEquipos, precision: vistaPrecision };
+  var VISTAS = { jornada: vistaJornada, picks: vistaPicks, aciertos: vistaAciertos, libre: vistaLibre, equipos: vistaEquipos, precision: vistaPrecision };
   function pintar() {
     document.querySelectorAll('.pestanas button').forEach(function (b) { b.setAttribute('aria-selected', String(b.getAttribute('data-vista') === E.vista)); });
     VISTAS[E.vista]();

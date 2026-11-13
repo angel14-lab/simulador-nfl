@@ -160,3 +160,4 @@ dialog::backdrop { background: rgba(5, 10, 20, .6); }
 .aviso { border-left: 3px solid var(--tinta-3); padding: 6px 10px; color: var(--tinta-2); font-size: 13px; margin: 12px 0; }
 ul.lista { margin: 0; padding-left: 18px; color: var(--tinta-2); font-size: 14px; } ul.lista li { margin-bottom: 5px; }
 @media (max-width: 560px) { dialog { padding: 12px; } .dialogo-cab { top: -12px; margin: -12px -12px 10px; padding: 10px 12px; } .tarjeta { padding: 12px; } .rejilla { grid-template-columns: 1fr; } h1 { font-size: 26px; } .duelo-prob { font-size: 36px; } }
+.mejor.bien { border-left-color: var(--bien); } .mejor.mal { border-left-color: var(--mal); }

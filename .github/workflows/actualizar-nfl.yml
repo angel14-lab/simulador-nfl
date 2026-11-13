@@ -1,10 +1,11 @@
 name: Actualizar datos NFL
 
-# Cada día baja de nflverse los resultados, la eficiencia por jugada y el parte de
-# lesiones (que cambia de miércoles a viernes) y guarda la copia que usa el sitio.
+# Cada hora baja de nflverse los resultados, la eficiencia por jugada, las lesiones y los
+# jugadores; guarda la copia que usa el sitio, congela los picks de los partidos que
+# están por empezar y califica los que ya terminaron.
 on:
   schedule:
-    - cron: '23 10 * * *'
+    - cron: '23 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -22,6 +23,7 @@ jobs:
         run: |
           node herramientas/actualizar-datos.js
           node herramientas/ajustar.js
+          node herramientas/registrar-picks.js
       - name: Guardar si hubo cambios
         run: |
           if git diff --quiet -- datos; then
