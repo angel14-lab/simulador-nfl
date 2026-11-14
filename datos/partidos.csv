@@ -4500,18 +4500,18 @@ game_id,season,game_type,week,gameday,gametime,away_team,away_score,home_team,ho
 2026_09_BUF_MIN,2026,REG,9,2026-11-09,20:15,BUF,23,MIN,6,Home,0,-185,154,-3,45.5,Josh Allen,Carson Wentz,U.S. Bank Stadium,00-0034857,00-0032950,8,8,dome,-3.34,-33.85,1|0|0,2|0|0
 2026_10_WAS_NYG,2026,REG,10,2026-11-12,20:15,WAS,24,NYG,21,Home,0,102,-122,1.5,40.5,Jayden Daniels,J.J. McCarthy,MetLife Stadium,00-0039910,00-0039923,4,4,outdoors,1.17,9.60,1|1|0,0|0|0
 2026_10_NE_DET,2026,REG,10,2026-11-15,09:30,NE,,DET,,Neutral,,124,-148,2.5,49.5,Drake Maye,Jared Goff,FC Bayern Munich Stadium,00-0039851,00-0033106,7,7,dome,,,1|1|1,0|1|2
-2026_10_KC_ATL,2026,REG,10,2026-11-15,13:00,KC,,ATL,,Home,,-175,145,-3,47.5,Patrick Mahomes,Michael Penix Jr.,Mercedes-Benz Stadium,00-0033873,00-0039917,7,7,,,,0|0|0,0|0|0
-2026_10_HOU_CLE,2026,REG,10,2026-11-15,13:00,HOU,,CLE,,Home,,-238,195,-4.5,40.5,C.J. Stroud,Deshaun Watson,Huntington Bank Field,00-0039163,00-0033537,7,7,outdoors,,,0|0|0,0|0|0
-2026_10_MIN_GB,2026,REG,10,2026-11-15,13:00,MIN,,GB,,Home,,136,-162,3,42.5,Kirk Cousins,Jordan Love,Lambeau Field,00-0029604,00-0036264,6,7,outdoors,,,0|0|0,0|0|0
-2026_10_MIA_IND,2026,REG,10,2026-11-15,13:00,MIA,,IND,,Home,,180,-218,3.5,38.5,Malik Willis,Daniel Jones,Lucas Oil Stadium,00-0038128,00-0035710,7,7,,,,0|0|0,0|0|0
-2026_10_CAR_NO,2026,REG,10,2026-11-15,13:00,CAR,,NO,,Home,,114,-135,2.5,48.5,Bryce Young,Tyler Shough,Caesars Superdome,00-0039150,00-0040743,7,7,dome,,,0|0|0,0|0|0
-2026_10_BUF_NYJ,2026,REG,10,2026-11-15,13:00,BUF,,NYJ,,Home,,-425,330,-8.5,50.5,Josh Allen,Geno Smith,MetLife Stadium,00-0034857,00-0030565,6,7,outdoors,,,0|0|0,0|0|0
-2026_10_JAX_TEN,2026,REG,10,2026-11-15,13:00,JAX,,TEN,,Home,,-700,500,-10.5,46.5,Trevor Lawrence,Cam Ward,Nissan Stadium,00-0036971,00-0040676,10,14,outdoors,,,0|0|0,0|0|0
-2026_10_LA_ARI,2026,REG,10,2026-11-15,16:05,LA,,ARI,,Home,,-500,380,-9.5,39.5,Matthew Stafford,Gardner Minshew,State Farm Stadium,00-0026498,00-0035289,7,7,,,,0|0|0,0|0|0
-2026_10_SEA_LV,2026,REG,10,2026-11-15,16:05,SEA,,LV,,Home,,-305,245,-6.5,40.5,Sam Darnold,Fernando Mendoza,Allegiant Stadium,00-0034869,00-0041562,7,7,dome,,,0|0|0,0|0|0
-2026_10_SF_DAL,2026,REG,10,2026-11-15,16:25,SF,,DAL,,Home,,-218,180,-4.5,55.5,Brock Purdy,Dak Prescott,AT&T Stadium,00-0037834,00-0033077,7,7,,,,0|0|0,0|0|0
-2026_10_PIT_CIN,2026,REG,10,2026-11-15,20:20,PIT,,CIN,,Home,,154,-185,3.5,49.5,Aaron Rodgers,Joe Burrow,Paycor Stadium,00-0023459,00-0036442,14,7,outdoors,,,0|0|0,0|0|0
-2026_10_LAC_BAL,2026,REG,10,2026-11-16,20:15,LAC,,BAL,,Home,,185,-225,4.5,38.5,Justin Herbert,Tyler Huntley,M&T Bank Stadium,00-0036355,00-0035993,8,11,outdoors,,,0|0|0,0|0|0
+2026_10_KC_ATL,2026,REG,10,2026-11-15,13:00,KC,,ATL,,Home,,-175,145,-3,47.5,Patrick Mahomes,Michael Penix Jr.,Mercedes-Benz Stadium,00-0033873,00-0039917,7,7,,,,0|1|2,1|0|1
+2026_10_HOU_CLE,2026,REG,10,2026-11-15,13:00,HOU,,CLE,,Home,,-238,195,-4.5,40.5,C.J. Stroud,Deshaun Watson,Huntington Bank Field,00-0039163,00-0033537,7,7,outdoors,,,2|1|2,0|0|1
+2026_10_MIN_GB,2026,REG,10,2026-11-15,13:00,MIN,,GB,,Home,,124,-148,2.5,42.5,Kirk Cousins,Jordan Love,Lambeau Field,00-0029604,00-0036264,6,7,outdoors,,,2|0|2,2|1|2
+2026_10_MIA_IND,2026,REG,10,2026-11-15,13:00,MIA,,IND,,Home,,180,-218,3.5,38.5,Malik Willis,Daniel Jones,Lucas Oil Stadium,00-0038128,00-0035710,7,7,,,,2|1|0,1|1|3
+2026_10_CAR_NO,2026,REG,10,2026-11-15,13:00,CAR,,NO,,Home,,114,-135,2.5,48.5,Bryce Young,Tyler Shough,Caesars Superdome,00-0039150,00-0040743,7,7,dome,,,1|0|2,1|2|1
+2026_10_BUF_NYJ,2026,REG,10,2026-11-15,13:00,BUF,,NYJ,,Home,,-425,330,-8.5,50.5,Josh Allen,Geno Smith,MetLife Stadium,00-0034857,00-0030565,6,7,outdoors,,,0|1|0,0|0|1
+2026_10_JAX_TEN,2026,REG,10,2026-11-15,13:00,JAX,,TEN,,Home,,-700,500,-10.5,46.5,Trevor Lawrence,Cam Ward,Nissan Stadium,00-0036971,00-0040676,10,14,outdoors,,,0|0|3,1|1|2
+2026_10_LA_ARI,2026,REG,10,2026-11-15,16:05,LA,,ARI,,Home,,-500,380,-9.5,39.5,Matthew Stafford,Gardner Minshew,State Farm Stadium,00-0026498,00-0035289,7,7,,,,1|1|0,0|2|1
+2026_10_SEA_LV,2026,REG,10,2026-11-15,16:05,SEA,,LV,,Home,,-305,245,-6.5,40.5,Sam Darnold,Fernando Mendoza,Allegiant Stadium,00-0034869,00-0041562,7,7,dome,,,0|2|1,0|0|0
+2026_10_SF_DAL,2026,REG,10,2026-11-15,16:25,SF,,DAL,,Home,,-218,180,-4.5,55.5,Brock Purdy,Dak Prescott,AT&T Stadium,00-0037834,00-0033077,7,7,,,,1|0|0,3|0|3
+2026_10_PIT_CIN,2026,REG,10,2026-11-15,20:20,PIT,,CIN,,Home,,154,-185,3.5,49.5,Aaron Rodgers,Joe Burrow,Paycor Stadium,00-0023459,00-0036442,14,7,outdoors,,,0|0|0,1|1|2
+2026_10_LAC_BAL,2026,REG,10,2026-11-16,20:15,LAC,,BAL,,Home,,180,-218,4.5,38.5,Justin Herbert,Tyler Huntley,M&T Bank Stadium,00-0036355,00-0035993,8,11,outdoors,,,0|0|0,0|0|0
 2026_11_IND_HOU,2026,REG,11,2026-11-19,20:15,IND,,HOU,,Home,,350,-455,10,44.5,Daniel Jones,C.J. Stroud,Reliant Stadium,00-0035710,00-0039163,4,4,,,,0|0|0,0|0|0
 2026_11_MIA_BUF,2026,REG,11,2026-11-22,13:00,MIA,,BUF,,Home,,950,-1650,16.5,46.5,Malik Willis,Josh Allen,Highmark Stadium,00-0038128,00-0034857,7,7,outdoors,,,0|0|0,0|0|0
 2026_11_BAL_CAR,2026,REG,11,2026-11-22,13:00,BAL,,CAR,,Home,,105,-125,1.5,44.5,Tyler Huntley,Bryce Young,Bank of America Stadium,00-0035993,00-0039150,6,7,outdoors,,,0|0|0,0|0|0
