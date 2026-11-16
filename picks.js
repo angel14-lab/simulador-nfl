@@ -26,6 +26,10 @@
     recepcion: { nombre: 'yardas de recepción', col: 11, escala: [25, 40, 50, 60, 75, 100] }
   };
 
+  // Nombre de jugador sin acentos, signos ni sufijos (Jr., III), para casar fuentes distintas.
+  function normalizar(n) {
+    return String(n).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z ]/g, '').replace(/ (jr|sr|ii|iii|iv|v)$/, '').replace(/ +/g, ' ').trim();
+  }
   function signo(x) { return (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).toString(); }
   function textoHandicap(equipo, h) { return equipo + ' ' + (h === 0 ? 'PK' : signo(h)); }
 
@@ -140,9 +144,18 @@
         /* Yardas: el hito más exigente que el modelo da al 70% o más, y solo si el jugador ya lo viene
            logrando en la mayoría de sus últimos partidos. En la validación (2023-2026) estos picks
            acertaron 78% en pase, 75% por tierra y 75% en recepción. */
+        var reales = ctx.lineas && ctx.lineas[p.id] && ctx.lineas[p.id].jug ? ctx.lineas[p.id].jug[normalizar(j.j.n)] : null, casa = reales ? ctx.lineas[p.id].casaJugadores || 'la casa' : '';
         Object.keys(HITOS).forEach(function (k) {
           if (!j.pr[k]) return;
           var hito = null, logrados;
+          if (reales && reales[k]) {
+            // Hay línea real de una casa: el pick se hace sobre ella y no sobre un hito propio.
+            var real = reales[k], mas = M.probAlMenos(j.pr[k].m, j.pr[k].sd, Math.floor(real.l) + 1), arriba = mas >= 0.5;
+            logrados = j.previos.filter(function (g) { return arriba ? g[HITOS[k].col] > real.l : g[HITOS[k].col] < real.l; }).length;
+            poner('jug', j.eq, j.j.n, (arriba ? 'más de ' : 'menos de ') + real.l + ' ' + HITOS[k].nombre, Math.max(mas, 1 - mas), { m: 'yardas', id: j.j.id, est: k, linea: real.l, mas: arriba },
+              { duda: j.duda, cuotaReal: arriba ? real.mas : real.menos, resp: 'línea de ' + casa + ' · lo logró en ' + logrados + ' de sus últimos ' + j.previos.length });
+            return;
+          }
           HITOS[k].escala.forEach(function (u) { var q = M.probAlMenos(j.pr[k].m, j.pr[k].sd, u); if (q >= SEGURO) hito = { u: u, q: q }; });
           if (!hito) return;
           logrados = j.previos.filter(function (g) { return g[HITOS[k].col] >= hito.u; }).length;
@@ -223,11 +236,11 @@
     e = estad(m.id);
     if (!e) return null;
     if (m.m === 'td') return e.td >= 1;
-    if (m.m === 'yardas') return e[m.est] >= m.linea;
+    if (m.m === 'yardas') return m.mas === false ? e[m.est] < m.linea : e[m.est] >= m.linea;
     if (m.m === 'tdPase') return (e.tdPase > m.linea) === m.mas;
     return null;
   }
 
-  return { NOMBRES: NOMBRES, MARGEN_CONGELAR: MARGEN_CONGELAR, MINIMO: MINIMO, SEGURO: SEGURO, MAXIMO: MAXIMO, indexar: indexar, parte: parte, jugadoresDe: jugadoresDe, probJugador: probJugador,
+  return { NOMBRES: NOMBRES, MARGEN_CONGELAR: MARGEN_CONGELAR, MINIMO: MINIMO, SEGURO: SEGURO, MAXIMO: MAXIMO, normalizar: normalizar, indexar: indexar, parte: parte, jugadoresDe: jugadoresDe, probJugador: probJugador,
     lineaEquipo: lineaEquipo, masDe: masDe, masQue: masQue, CUENTAS: CUENTAS, lineaJusta: lineaJusta, picksDe: picksDe, inicio: inicio, calificar: calificar, textoHandicap: textoHandicap };
 });

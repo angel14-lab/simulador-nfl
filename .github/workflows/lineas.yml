@@ -1,0 +1,41 @@
+name: Líneas de casas de apuestas
+
+# Baja las líneas reales (hándicap, total y jugadores) con The Odds API. Corre pocas veces por
+# semana para no gastar el cupo gratuito: jueves, domingo y lunes, unas horas antes de los partidos.
+# Necesita el secreto ODDS_API_KEY; sin él termina sin hacer nada.
+on:
+  schedule:
+    - cron: '7 20 * * 4'
+    - cron: '7 14 * * 0'
+    - cron: '7 20 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  lineas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Bajar líneas y rehacer los picks vigentes
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: |
+          node herramientas/actualizar-lineas.js
+          node herramientas/registrar-picks.js
+      - name: Guardar si hubo cambios
+        run: |
+          git add datos
+          if git diff --cached --quiet; then
+            echo "Sin líneas nuevas."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Líneas de casas de apuestas: actualización automática"
+          git pull --rebase origin main
+          git push

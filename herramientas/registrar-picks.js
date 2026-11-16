@@ -8,7 +8,7 @@ const SIMULACIONES = 10000, VENTANA = 8 * 24 * 3600 * 1000, MAX_ANOTADORES = 8;
 
 const partidos = M.prepararPartidos(M.leerCSV(fs.readFileSync(path.join(datos, 'partidos.csv'), 'utf8')), 2010);
 const estado = M.calificar(partidos), jug = leer('jugadores.json', null), indice = P.indexar(jug);
-const ctx = { jug, porEquipo: indice.porEquipo, semanas: indice.semanas, lesiones: leer('lesiones.json', null), titular: estado.titular };
+const ctx = { jug, porEquipo: indice.porEquipo, semanas: indice.semanas, lesiones: leer('lesiones.json', null), titular: estado.titular, lineas: (leer('lineas.json', {}) || {}).partidos || {} };
 const historial = leer('historial.json', { partidos: {} }), ahora = Date.now();
 const ultima = partidos[partidos.length - 1].temporada, r3 = x => Math.round(x * 1000) / 1000;
 let congelados = 0, calificados = 0;
@@ -30,7 +30,7 @@ function pronosticar(p, ini, reconstruir) {
     temporada: p.temporada, semana: p.semana, visita: p.visita, local: p.local, inicio: new Date(ini).toISOString(),
     pV: r3(sim.pVisita), pL: r3(sim.pLocal), mV: Math.round(sim.mediaVisita * 10) / 10, mL: Math.round(sim.mediaLocal * 10) / 10,
     picks: todos.filter(k => k.tipo !== 'td').concat(anotadores).sort((a, b) => b.prob - a.prob)
-      .map(k => Object.assign({ t: k.tipo, eq: k.eq, q: k.quien, que: k.que, p: r3(k.prob), m: k.m }, k.resp ? { r: k.resp } : {}))
+      .map(k => Object.assign({ t: k.tipo, eq: k.eq, q: k.quien, que: k.que, p: r3(k.prob), m: k.m }, k.resp ? { r: k.resp } : {}, k.cuotaReal ? { c: k.cuotaReal } : {}))
   };
 }
 function calificar(reg, p) {

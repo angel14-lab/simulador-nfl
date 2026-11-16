@@ -64,17 +64,17 @@
     var nada = function () { return null; }, json = function (u) { return traer(u, 15000).then(JSON.parse).catch(nada); };
     return Promise.all([
       traer(URL_VIVO, 9000).catch(nada), traer('datos/partidos.csv', 15000).catch(nada),
-      json('datos/lesiones.json'), json('datos/jugadores.json'), json('datos/calibracion-jugadores.json'), json('datos/historial.json')
+      json('datos/lesiones.json'), json('datos/jugadores.json'), json('datos/calibracion-jugadores.json'), json('datos/historial.json'), json('datos/lineas.json')
     ]).then(function (r) {
       if (!r[0] && !r[1]) throw new Error('sin conexión con los datos');
       var copia = r[1] ? M.leerCSV(r[1]) : null;
       E.origen = r[0] ? 'en vivo desde nflverse' : 'copia guardada en el sitio';
-      E.lesiones = r[2]; E.jug = r[3]; E.calib = r[4]; E.hist = (r[5] && r[5].partidos) || {};
+      E.lesiones = r[2]; E.jug = r[3]; E.calib = r[4]; E.hist = (r[5] && r[5].partidos) || {}; E.reales = (r[6] && r[6].partidos) || {};
       E.partidos = M.prepararPartidos(r[0] ? M.leerCSV(r[0]) : copia, 2010, r[0] ? copia : null);
       if (!E.partidos.length) throw new Error('sin partidos');
       E.estado = M.calificar(E.partidos);
       var ind = P.indexar(E.jug);
-      E.ctx = { jug: E.jug, porEquipo: ind.porEquipo, semanas: ind.semanas, lesiones: E.lesiones, titular: E.estado.titular };
+      E.ctx = { jug: E.jug, porEquipo: ind.porEquipo, semanas: ind.semanas, lesiones: E.lesiones, titular: E.estado.titular, lineas: E.reales };
       var jugados = E.partidos.filter(function (p) { return p.jugado; });
       var ultimo = jugados[jugados.length - 1];
       E.ultima = E.partidos[E.partidos.length - 1].temporada;
@@ -150,7 +150,7 @@
   function enJuego(p) { var ini = P.inicio(p); return !p.jugado && ini != null && Date.now() >= ini; }
   function picksCongelados(p, reg) {
     var juego = p.visita + ' en ' + p.local;
-    return reg.picks.filter(function (k) { return !retirado(k.m); }).map(function (k) { return { tipo: k.t, eq: k.eq, quien: k.q, que: k.que, prob: k.p, ok: k.ok, resp: k.r, m: k.m, calificado: !!reg.calificado, juego: juego, p: p }; });
+    return reg.picks.filter(function (k) { return !retirado(k.m); }).map(function (k) { return { tipo: k.t, eq: k.eq, quien: k.q, que: k.que, prob: k.p, ok: k.ok, resp: k.r, m: k.m, cuotaReal: k.c, calificado: !!reg.calificado, juego: juego, p: p }; });
   }
   // Un pick se muestra si no es de anotador y su probabilidad está entre el mínimo y el máximo (cuota justa de 1.25 a 1.72).
   function retirado(m) { return !!m && m.m === 'tdPase' && m.mas === false; } // «menos pases de touchdown»: mercado retirado, tampoco se enseña en partidos ya guardados
@@ -162,7 +162,7 @@
   function filaPick(k, conJuego, indice) {
     return '<li class="pick"' + (indice != null ? ' data-i="' + indice + '" tabindex="0"' : '') + '><span class="pick-prob">' + pct(k.prob, 0) + '</span><span class="pick-cuerpo">' + (k.eq ? escudo(k.eq) + ' ' : '') + '<b>' + esc(k.quien) + '</b> ' + esc(k.que) +
       marca(k) + (k.duda ? ' <span class="etiqueta">en duda</span>' : '') + (k.dos != null ? ' <span class="tenue">· 2 o más: ' + pct(k.dos, 0) + '</span>' : '') + (k.resp ? ' <span class="tenue">· ' + esc(k.resp) + '</span>' : '') + (conJuego ? '<br><span class="tenue">' + esc(k.juego) + '</span>' : '') +
-      '</span><span class="pick-cuota"><small>cuota justa</small>' + cuota(k.prob) + '</span></li>';
+      '</span><span class="pick-cuota"><small>' + (k.cuotaReal ? 'paga ' + Number(k.cuotaReal).toFixed(2) + ' · justa' : 'cuota justa') + '</small>' + cuota(k.prob) + '</span></li>';
   }
 
   // ---------- globo de ayuda para los gráficos ----------
@@ -483,6 +483,8 @@
     if (E.lineas && E.lineas[id]) return E.lineas[id];
     E.lineas = E.lineas || {};
     try { E.lineas[id] = JSON.parse(localStorage.getItem('lineas:' + id)) || { m: {}, j: {} }; } catch (e) { E.lineas[id] = { m: {}, j: {} }; }
+    var real = E.reales[id]; // lo que no haya escrito el usuario se rellena con la línea real de la casa, si se bajó
+    if (real) { if (real.h != null && E.lineas[id].m.h == null) E.lineas[id].m.h = real.h; if (real.t != null && E.lineas[id].m.t == null) E.lineas[id].m.t = real.t; }
     return E.lineas[id];
   }
   function guardarLineas(id) { try { localStorage.setItem('lineas:' + id, JSON.stringify(E.lineas[id])); } catch (e) { /* sin almacenamiento: se conservan mientras la página esté abierta */ } }
@@ -498,14 +500,15 @@
   function bloqueLineas(p, c) {
     var L = leerLineas(p.id), jug = jugadoresDe(p, 'v').concat(jugadoresDe(p, 'l'));
     function campo(clave, valor, sugerida) { return '<input class="lin" type="number" step="0.5" data-lin="' + clave + '" value="' + (valor != null ? valor : '') + '"' + (sugerida != null ? ' placeholder="' + sugerida + '"' : '') + ' aria-label="Línea">'; }
-    return '<p class="aviso">Escribe aquí las líneas que ves en Betano y la página te dice qué lado es más probable con esa línea exacta. Solo rellena las que te interesen; se guardan en este navegador.</p>' +
+    return '<p class="aviso">' + (E.reales[p.id] ? 'Líneas reales de ' + esc(E.reales[p.id].casaJugadores || E.reales[p.id].casa || 'una casa de apuestas') + ', bajadas el ' + new Date(E.reales[p.id].actualizado).toLocaleString('es', { weekday: 'long', hour: '2-digit', minute: '2-digit' }) + '. Si en Betano alguna es distinta, corrígela aquí.' : 'Escribe aquí las líneas que ves en Betano y la página te dice qué lado es más probable con esa línea exacta. Solo rellena las que te interesen; se guardan en este navegador.') + '</p>' +
       '<div class="dos"><section class="tarjeta"><h3>Líneas del partido</h3><table>' + mercadosLinea(p, c).map(function (m) {
         return '<tr><td>' + m.nombre + '</td><td>' + campo('m:' + m.k, L.m[m.k], m.sugerida) + '</td></tr>'; }).join('') + '</table>' +
       '<p class="tenue" style="margin-top:8px">En gris, la línea de cierre del mercado cuando la conozco. Hándicap negativo = favorito.</p></section>' +
       '<section class="tarjeta"><h3>Con tus líneas</h3><div id="lin-res"></div></section></div>' +
       (jug.length ? '<div class="dos"><section class="tarjeta ancho"><h3>Líneas de jugadores</h3><div class="desborde"><table><tr><th>Jugador</th>' + ESTAD_LINEA.map(function (e) { return '<th>' + e[1] + '</th>'; }).join('') + '</tr>' +
         jug.map(function (x) {
-          var mias = L.j[x.j.id] || {};
+          var mias = L.j[x.j.id] = L.j[x.j.id] || {}, rj = E.reales[p.id] && E.reales[p.id].jug ? E.reales[p.id].jug[P.normalizar(x.j.n)] : null;
+          if (rj) ESTAD_LINEA.forEach(function (e) { if (rj[e[0]] && rj[e[0]].l != null && mias[e[0]] == null) mias[e[0]] = rj[e[0]].l; });
           return '<tr><td>' + escudo(x.eq) + ' ' + esc(x.j.n) + ' <span class="tenue">' + x.j.p + '</span></td>' + ESTAD_LINEA.map(function (e) {
             if (x.pr[e[0]] == null) return '<td><span class="tenue">·</span></td>';
             return '<td>' + campo('j:' + x.j.id + ':' + e[0], mias[e[0]], e[0] === 'tdPase' ? 1.5 : P.lineaJusta(x.pr[e[0]])) + '</td>'; }).join('') + '</tr>';
