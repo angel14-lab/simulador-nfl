@@ -56,7 +56,36 @@
   }
   function probJugador(pr, k, umbral) {
     if (pr[k] == null) return null;
+    if (k === 'td' && umbral === 1) { // por encima del 45% el modelo exagera: los que «casi seguro anotan» anotan la mitad de las veces
+      var q = M.probPoisson(pr[k], 1);
+      return q > 0.45 ? 0.45 + (q - 0.45) * 0.7 : q;
+    }
+    if (k === 'tdPase' && umbral >= 3) return M.probPoisson(pr[k], umbral) * M.JUG.tercerTdPase; // tres o más pases de TD salen menos de lo que dice Poisson
     return POISSON[k] ? M.probPoisson(pr[k], umbral) : M.probAlMenos(pr[k].m, pr[k].sd, umbral);
+  }
+  // Línea a la que más y menos quedan cerca del 50%: la que debería ofrecer una casa para ese jugador.
+  function lineaJusta(e) {
+    var a = 0, b = e.m * 4 + 10, i, x;
+    for (i = 0; i < 40; i++) { x = (a + b) / 2; if (M.probAlMenos(e.m, e.sd, x) > 0.5) a = x; else b = x; }
+    return Math.max(0.5, Math.round(a) - 0.5);
+  }
+  // Fracción de simulaciones en las que una cuenta (touchdowns, goles de campo) supera la línea.
+  function masQue(sim, valor, linea) {
+    var c = 0, i;
+    for (i = 0; i < sim.n; i++) if (valor(i) > linea) c++;
+    return c / sim.n;
+  }
+  var CUENTAS = {
+    tds: function (sim) { return function (i) { return sim.tdLocal[i] + sim.tdVisita[i]; }; },
+    tdsLocal: function (sim) { return function (i) { return sim.tdLocal[i]; }; },
+    tdsVisita: function (sim) { return function (i) { return sim.tdVisita[i]; }; },
+    fg: function (sim) { return function (i) { return sim.golesCampo[i]; }; }
+  };
+  // De una lista de líneas, la más pareja (la principal de la casa) con su probabilidad de «más de».
+  function lineaPrincipal(sim, cuenta, lineas) {
+    var mejor = null;
+    lineas.forEach(function (l) { var q = masQue(sim, cuenta, l); if (!mejor || Math.abs(q - 0.5) < Math.abs(mejor.q - 0.5)) mejor = { l: l, q: q }; });
+    return mejor;
   }
   // Línea de puntos de un equipo que suele ofrecer la casa: la que se deduce del hándicap y del total.
   function lineaEquipo(p, lado, esp) {
@@ -88,13 +117,18 @@
       var t = M.totales(sim, p.lineaTotal), mas = t.mas >= t.menos;
       poner('total', null, (mas ? 'Más de ' : 'Menos de ') + p.lineaTotal, 'puntos en el partido', Math.max(t.mas, t.menos) / (1 - t.nulo || 1), { m: 'total', mas: mas, linea: p.lineaTotal });
     }
+    var lt = lineaPrincipal(sim, CUENTAS.tds(sim), [3.5, 4.5, 5.5, 6.5, 7.5]), lg = lineaPrincipal(sim, CUENTAS.fg(sim), [2.5, 3.5, 4.5]);
+    poner('anot', null, (lt.q >= 0.5 ? 'Más de ' : 'Menos de ') + lt.l, 'touchdowns en el partido', Math.max(lt.q, 1 - lt.q), { m: 'tds', mas: lt.q >= 0.5, linea: lt.l });
+    poner('anot', null, (lg.q >= 0.5 ? 'Más de ' : 'Menos de ') + lg.l, 'goles de campo en el partido', Math.max(lg.q, 1 - lg.q), { m: 'fg', mas: lg.q >= 0.5, linea: lg.l });
     [['v', p.visita], ['l', p.local]].forEach(function (x) {
+      var le = lineaPrincipal(sim, x[0] === 'l' ? CUENTAS.tdsLocal(sim) : CUENTAS.tdsVisita(sim), [1.5, 2.5, 3.5]);
+      poner('anot', x[1], x[1] + (le.q >= 0.5 ? ' más de ' : ' menos de ') + le.l, 'touchdowns del equipo', Math.max(le.q, 1 - le.q), { m: 'tdsEquipo', eq: x[1], mas: le.q >= 0.5, linea: le.l });
       var l = lineaEquipo(p, x[0], esp), q = masDe(sim, x[0], l);
       poner('total', x[1], x[1] + (q >= 0.5 ? ' más de ' : ' menos de ') + l, 'puntos del equipo', Math.max(q, 1 - q), { m: 'equipo', eq: x[1], mas: q >= 0.5, linea: l });
       jugadoresDe(ctx, p, x[0], reconstruir).forEach(function (j) {
-        if (j.pr.td != null) poner('td', j.eq, j.j.n, 'anota touchdown', M.probPoisson(j.pr.td, 1), { m: 'td', id: j.j.id }, { duda: j.duda, dos: M.probPoisson(j.pr.td, 2) });
+        if (j.pr.td != null) poner('td', j.eq, j.j.n, 'anota touchdown', probJugador(j.pr, 'td', 1), { m: 'td', id: j.j.id }, { duda: j.duda, dos: probJugador(j.pr, 'td', 2) });
         if (j.pr.tdPase != null) {
-          var dos = M.probPoisson(j.pr.tdPase, 2);
+          var dos = probJugador(j.pr, 'tdPase', 2);
           poner('qb', j.eq, j.j.n, (dos >= 0.5 ? 'más de' : 'menos de') + ' 1.5 pases de touchdown', Math.max(dos, 1 - dos), { m: 'tdPase', id: j.j.id, mas: dos >= 0.5, linea: 1.5 }, { duda: j.duda });
         }
       });
@@ -122,6 +156,9 @@
     if (m.m === 'handicap') { x = (m.eq === p.local ? d : -d) + m.linea; return x === 0 ? null : x > 0; }
     if (m.m === 'total') { x = p.ptsLocal + p.ptsVisita - m.linea; return x === 0 ? null : (x > 0) === m.mas; }
     if (m.m === 'equipo') { x = (m.eq === p.local ? p.ptsLocal : p.ptsVisita) - m.linea; return x === 0 ? null : (x > 0) === m.mas; }
+    if (m.m === 'tds') return p.tdLocal == null || p.tdVisita == null ? null : (p.tdLocal + p.tdVisita > m.linea) === m.mas;
+    if (m.m === 'tdsEquipo') { x = m.eq === p.local ? p.tdLocal : p.tdVisita; return x == null ? null : (x > m.linea) === m.mas; }
+    if (m.m === 'fg') return p.golesCampo == null ? null : (p.golesCampo > m.linea) === m.mas;
     e = estad(m.id);
     if (!e) return null;
     if (m.m === 'td') return e.td >= 1;
@@ -130,5 +167,5 @@
   }
 
   return { NOMBRES: NOMBRES, MARGEN_CONGELAR: MARGEN_CONGELAR, indexar: indexar, parte: parte, jugadoresDe: jugadoresDe, probJugador: probJugador,
-    lineaEquipo: lineaEquipo, masDe: masDe, picksDe: picksDe, inicio: inicio, calificar: calificar, textoHandicap: textoHandicap };
+    lineaEquipo: lineaEquipo, masDe: masDe, masQue: masQue, CUENTAS: CUENTAS, lineaJusta: lineaJusta, picksDe: picksDe, inicio: inicio, calificar: calificar, textoHandicap: textoHandicap };
 });

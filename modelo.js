@@ -82,6 +82,7 @@
         descansoVisita: num(f.away_rest), descansoLocal: num(f.home_rest),
         bajoTecho: f.roof === 'dome' || f.roof === 'closed', techo: f.roof || '',
         epaVisita: num(x.away_epa), epaLocal: num(x.home_epa),
+        tdVisita: num(x.away_td), tdLocal: num(x.home_td), golesCampo: num(x.fg),
         bajasVisita: bajas(x.away_bajas), bajasLocal: bajas(x.home_bajas),
         estadio: f.stadium || '', prorroga: f.overtime === '1'
       });
@@ -215,38 +216,43 @@
      Devuelve los marcadores de cada simulación (Int16Array) y el resumen. */
   function simular(espL, espV, n, semilla, eliminatoria) {
     var r = azar(semilla || 1), prL = probsSerie(espL), prV = probsSerie(espV);
-    var L = new Int16Array(n), V = new Int16Array(n);
-    var ganaL = 0, ganaV = 0, empates = 0, prorrogas = 0, sumaL = 0, sumaV = 0, i, s, k, a, b, x;
+    var L = new Int16Array(n), V = new Int16Array(n), tdL = new Int8Array(n), tdV = new Int8Array(n), gc = new Int8Array(n), pr = new Int8Array(n);
+    var ganaL = 0, ganaV = 0, empates = 0, prorrogas = 0, sumaL = 0, sumaV = 0, i, s, k, a, b, x, ta, tb, g;
+    // Anota la serie en el marcador y en las cuentas de touchdowns y goles de campo.
+    function sumar(x, esLocal) {
+      if (x >= 6) { if (esLocal) ta++; else tb++; } else if (x === 3) g++;
+      if (esLocal) a += x; else b += x;
+    }
     for (i = 0; i < n; i++) {
-      s = SIM.series[(r() * SIM.series.length) | 0]; a = 0; b = 0;
+      s = SIM.series[(r() * SIM.series.length) | 0]; a = 0; b = 0; ta = 0; tb = 0; g = 0;
       var cierraL = r() < 0.5; // quién tiene la última posesión del partido
       for (k = 0; k < s; k++) {
-        if (k < s - 1) { a += serie(r, prL); b += serie(r, prV); continue; }
+        if (k < s - 1) { sumar(serie(r, prL), true); sumar(serie(r, prV), false); continue; }
         // Última serie de cada equipo: se juega según el marcador, como en un partido real.
-        if (cierraL) { b += final(r, prV, b - a, false); a += final(r, prL, a - b, true); }
-        else { a += final(r, prL, a - b, false); b += final(r, prV, b - a, true); }
+        if (cierraL) { sumar(final(r, prV, b - a, false), false); sumar(final(r, prL, a - b, true), true); }
+        else { sumar(final(r, prL, a - b, false), true); sumar(final(r, prV, b - a, true), false); }
       }
       if (a === b) {
-        prorrogas++;
+        prorrogas++; pr[i] = 1;
         // Prórroga (regla actual): una posesión para cada uno y después gana el primero que anota.
         var primeroL = r() < 0.5, ronda = 0, maxRondas = eliminatoria ? 50 : 3;
         while (a === b && ronda < maxRondas) {
           if (ronda === 0) {
-            a += serie(r, prL); b += serie(r, prV);
+            sumar(serie(r, prL), true); sumar(serie(r, prV), false);
           } else {
             x = serie(r, primeroL ? prL : prV);
-            if (x) { if (primeroL) a += x; else b += x; break; }
+            if (x) { sumar(x, primeroL); break; }
             x = serie(r, primeroL ? prV : prL);
-            if (x) { if (primeroL) b += x; else a += x; break; }
+            if (x) { sumar(x, !primeroL); break; }
           }
           ronda++;
         }
       }
-      L[i] = a; V[i] = b; sumaL += a; sumaV += b;
+      L[i] = a; V[i] = b; tdL[i] = ta; tdV[i] = tb; gc[i] = g; sumaL += a; sumaV += b;
       if (a > b) ganaL++; else if (b > a) ganaV++; else empates++;
     }
     return {
-      n: n, local: L, visita: V,
+      n: n, local: L, visita: V, tdLocal: tdL, tdVisita: tdV, golesCampo: gc, huboProrroga: pr,
       pLocal: ganaL / n, pVisita: ganaV / n, pEmpate: empates / n, pProrroga: prorrogas / n,
       mediaLocal: sumaL / n, mediaVisita: sumaV / n
     };
@@ -284,7 +290,9 @@
     carrera:  { c: 42,  s: 0.15, a: 17,   b: 0.29 },
     recepcion:{ c: 38,  s: 0.15, a: 14,   b: 0.38 },
     atrapadas:{ c: 3.4, s: 0.13, a: 1.05, b: 0.29 },
-    tdPorYarda: 0.00674, tdPasePorYarda: 0.00644, rival: 0.5
+    tdPorYarda: 0.00674, tdPasePorYarda: 0.00644, rival: 0.5,
+    // Recalibración (1 386 partidos de quarterback, 2023-2026): el modelo se quedaba corto en touchdowns.
+    ajusteTdPase: 1.08, ajusteTd: 1.03, tercerTdPase: 0.85
   };
   // Columnas de cada partido de un jugador en datos/jugadores.json
   var COL = { t: 0, s: 1, riv: 2, pa: 3, py: 4, pt: 5, ca: 6, ry: 7, rt: 8, tg: 9, re: 10, cy: 11, ct: 12 };
@@ -353,11 +361,11 @@
     var r = { partidos: pesos.length, deEstaTemporada: pesos.filter(function (x) { return x[0][COL.t] === temporada; }).length };
     if (jug.p === 'QB' && pa >= 20) {
       r.pase = ajustada(JUG.pase, py, fp);
-      r.tdPase = (pt * 3.9 + 4 * (JUG.pase.c + (1 - JUG.pase.s) * (py - JUG.pase.c)) * JUG.tdPasePorYarda) / 7.9 * ft;
+      r.tdPase = (pt * 3.9 + 4 * (JUG.pase.c + (1 - JUG.pase.s) * (py - JUG.pase.c)) * JUG.tdPasePorYarda) / 7.9 * ft * JUG.ajusteTdPase;
     }
     if (ry >= 15) r.carrera = ajustada(JUG.carrera, ry, fr);
     if (cy >= 15) { r.recepcion = ajustada(JUG.recepcion, cy, fp); r.atrapadas = ajustada(JUG.atrapadas, re, 1); }
-    if ((jug.p !== 'QB' && ry + cy >= 20) || (jug.p === 'QB' && (ry >= 10 || r.pase))) r.td = (td * 3.9 + 8 * (ry + cy) * JUG.tdPorYarda) / 11.9 * ft;
+    if ((jug.p !== 'QB' && ry + cy >= 20) || (jug.p === 'QB' && (ry >= 10 || r.pase))) r.td = (td * 3.9 + 8 * (ry + cy) * JUG.tdPorYarda) / 11.9 * ft * JUG.ajusteTd;
     return r.pase || r.carrera || r.recepcion || r.td ? r : null;
   }
 

@@ -19,7 +19,7 @@ const estadDe = p => id => {
   const g = porId[id] && porId[id].j.find(x => x[0] === p.temporada && x[1] === p.semana);
   return g ? { td: g[8] + g[12], tdPase: g[5] } : null;
 };
-const hayEstadisticas = p => [p.local, p.visita].every(e => indice.semanas[e] && indice.semanas[e][p.semana]) && jug && jug.temporada === p.temporada;
+const hayEstadisticas = p => [p.local, p.visita].every(e => indice.semanas[e] && indice.semanas[e][p.semana]) && jug && jug.temporada === p.temporada && p.tdLocal != null;
 
 // Pronóstico de un partido tal como lo calcula la página con el modelo estadístico.
 function pronosticar(p, ini, reconstruir) {

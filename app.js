@@ -235,16 +235,16 @@
   function bloqueJugadores(p) {
     var lados = [['v', p.visita], ['l', p.local]].map(function (x) { return { eq: x[1], lista: jugadoresDe(p, x[0]) }; });
     if (!lados[0].lista.length && !lados[1].lista.length) return '';
-    function c(x) { return x ? Math.round(x.m) : '<span class="tenue">·</span>'; }
+    function c(x) { return x ? P.lineaJusta(x) : '<span class="tenue">·</span>'; }
     var tablas = lados.map(function (L) {
       return '<p style="margin:10px 0 4px">' + escudo(L.eq) + ' <b>' + esc(nombre(L.eq)) + '</b></p><div class="desborde"><table><tr><th>Jugador</th><th>Pase</th><th>Tierra</th><th>Recepción</th><th>Atrapadas</th><th>Anota TD</th></tr>' +
         L.lista.map(function (x) {
           return '<tr><td>' + esc(x.j.n) + ' <span class="tenue">' + x.j.p + (x.duda ? ' · en duda' : '') + '</span></td><td>' + c(x.pr.pase) + '</td><td>' + c(x.pr.carrera) + '</td><td>' + c(x.pr.recepcion) + '</td><td>' +
-            (x.pr.atrapadas ? x.pr.atrapadas.m.toFixed(1) : '<span class="tenue">·</span>') + '</td><td>' + (x.pr.td != null ? pct(M.probPoisson(x.pr.td, 1), 0) : '<span class="tenue">·</span>') + '</td></tr>';
+            c(x.pr.atrapadas) + '</td><td>' + (x.pr.td != null ? pct(probJugador(x.pr, 'td', 1), 0) : '<span class="tenue">·</span>') + '</td></tr>';
         }).join('') + '</table></div>';
     }).join('');
     var todos = lados[0].lista.concat(lados[1].lista);
-    return '<section class="tarjeta ancho"><h3>Jugadores: proyección para este partido</h3><p class="tenue">Yardas y recepciones esperadas según sus últimos partidos y la defensa rival. No incluye a descartados ni a quarterbacks suplentes.</p>' +
+    return '<section class="tarjeta ancho"><h3>Jugadores: línea justa de cada uno</h3><p class="tenue">La línea a la que «más de» y «menos de» quedan al 50%. Si tu casa ofrece una línea más baja, el «más de» tiene ventaja según el modelo; si es más alta, el «menos de». No incluye a descartados ni a quarterbacks suplentes.</p>' +
       '<div class="dos sin-margen"><div>' + tablas + '</div><div><h3 style="margin-top:10px">Calcula tu propia línea</h3>' +
       '<div class="fila"><label>Jugador<select id="cal-j">' + todos.map(function (x, i) { return '<option value="' + i + '">' + esc(x.j.n) + ' (' + x.eq + ')</option>'; }).join('') + '</select></label>' +
       '<label>Estadística<select id="cal-e"></select></label><label>Línea<input type="number" id="cal-l" step="0.5" min="0" style="width:90px"></label></div><div id="cal-r"></div>' +
@@ -336,8 +336,8 @@
       var qbs = jugadoresDe(p, 'v').concat(jugadoresDe(p, 'l')).filter(function (x) { return x.pr.pase; });
       if (qbs.length) htmlQB = '<div class="dos"><section class="tarjeta ancho"><h3>Quarterbacks</h3><div class="desborde"><table><tr><th>Quarterback</th><th>Yardas de pase</th><th>Más de 0.5 pases de TD</th><th>Más de 1.5</th><th>Más de 2.5</th><th>Anota TD por tierra</th><th>Yardas por tierra</th></tr>' +
         qbs.map(function (x) {
-          function td(n) { var q = M.probPoisson(x.pr.tdPase, n); return pct(q, 0) + ' <span class="tenue">' + cuota(q) + '</span>'; }
-          var tierra = x.pr.td != null ? M.probPoisson(x.pr.td, 1) : null;
+          function td(n) { var q = probJugador(x.pr, 'tdPase', n); return pct(q, 0) + ' <span class="tenue">' + cuota(q) + '</span>'; }
+          var tierra = x.pr.td != null ? probJugador(x.pr, 'td', 1) : null;
           return '<tr><td>' + escudo(x.eq) + ' ' + esc(x.j.n) + '</td><td>' + Math.round(x.pr.pase.m) + '</td><td>' + td(1) + '</td><td>' + td(2) + '</td><td>' + td(3) + '</td><td>' +
             (tierra != null ? pct(tierra, 0) + ' <span class="tenue">' + cuota(tierra) + '</span>' : '—') + '</td><td>' + (x.pr.carrera ? Math.round(x.pr.carrera.m) : '<span class="tenue">menos de 15</span>') + '</td></tr>';
         }).join('') + '</table></div><p class="tenue" style="margin-top:8px">Junto a cada probabilidad, su cuota justa. «Menos de» es el resto hasta 100%. Para otras líneas (yardas, recepciones) usa la calculadora de abajo.</p></section></div>';
@@ -356,7 +356,25 @@
     h += '<section class="tarjeta ancho"><h3>Puntos de cada equipo</h3><div class="dos sin-margen">' + [['v', c.visita], ['l', c.local]].map(function (x) {
       return '<div><label>' + escudo(x[1]) + ' Línea de puntos de ' + x[1] + '<span class="paso"><button data-paso="e' + x[0] + '" data-d="-1" aria-label="Bajar un punto">−</button><input type="number" step="0.5" id="in-e' + x[0] + '" value="' + lineasEq[x[0]] +
         '"><button data-paso="e' + x[0] + '" data-d="1" aria-label="Subir un punto">+</button></span></label><div id="res-e' + x[0] + '"></div></div>'; }).join('') +
-      '</div><p class="tenue">Línea inicial deducida del hándicap y del total del mercado; cámbiala por la que veas en tu casa.</p></section></div></div>';
+      '</div><p class="tenue">Línea inicial deducida del hándicap y del total del mercado; cámbiala por la que veas en tu casa.</p></section></div>';
+    // Mercados que salen de contar touchdowns, goles de campo y márgenes en las simulaciones.
+    function masMenos(titulo, cuenta, lineas) {
+      return lineas.map(function (l) { var q = P.masQue(sim, cuenta, l);
+        return '<tr><td>' + titulo + ' ' + l + '</td><td>' + pct(q, 0) + ' <span class="tenue">' + cuota(q) + '</span></td><td>' + pct(1 - q, 0) + ' <span class="tenue">' + cuota(1 - q) + '</span></td></tr>'; }).join('');
+    }
+    var bandas = [[1, 6], [7, 12], [13, 18], [19, 24], [25, 99]], impar = 0, pror = 0;
+    for (i = 0; i < n; i++) { if ((sim.local[i] + sim.visita[i]) % 2) impar++; if (sim.huboProrroga[i]) pror++; }
+    function banda(signo, b) { var q = 0, k, d; for (k = 0; k < n; k++) { d = signo * (sim.local[k] - sim.visita[k]); if (d >= b[0] && d <= b[1]) q++; } return q / n; }
+    function siNo(texto, q) { return '<tr><td>' + texto + '</td><td>' + pct(q, 0) + ' <span class="tenue">' + cuota(q) + '</span></td><td>' + pct(1 - q, 0) + ' <span class="tenue">' + cuota(1 - q) + '</span></td></tr>'; }
+    h += '<div class="dos"><section class="tarjeta"><h3>Touchdowns y goles de campo</h3><div class="desborde"><table><tr><th>Mercado</th><th>Más de</th><th>Menos de</th></tr>' +
+      masMenos('Touchdowns del partido', P.CUENTAS.tds(sim), [3.5, 4.5, 5.5, 6.5, 7.5]) + masMenos('Touchdowns de ' + c.visita, P.CUENTAS.tdsVisita(sim), [1.5, 2.5, 3.5]) +
+      masMenos('Touchdowns de ' + c.local, P.CUENTAS.tdsLocal(sim), [1.5, 2.5, 3.5]) + masMenos('Goles de campo del partido', P.CUENTAS.fg(sim), [2.5, 3.5, 4.5]) +
+      '</table></div><p class="tenue" style="margin-top:8px">Junto a cada probabilidad, su cuota justa.</p></section>' +
+      '<section class="tarjeta"><h3>Margen de victoria y otros</h3><div class="desborde"><table><tr><th>Gana por</th><th>' + c.visita + '</th><th>' + c.local + '</th></tr>' +
+      bandas.map(function (b) { var qv = banda(-1, b), ql = banda(1, b);
+        return '<tr><td>' + (b[1] === 99 ? b[0] + ' o más' : b[0] + ' a ' + b[1]) + ' puntos</td><td>' + pct(qv, 0) + ' <span class="tenue">' + cuota(qv) + '</span></td><td>' + pct(ql, 0) + ' <span class="tenue">' + cuota(ql) + '</span></td></tr>'; }).join('') +
+      '</table><table style="margin-top:12px"><tr><th>Otros mercados</th><th>Sí</th><th>No</th></tr>' + siNo('Habrá prórroga', pror / n) + siNo('Total de puntos impar', impar / n) +
+      '</table></div><p class="tenue" style="margin-top:8px">Los mercados de primera mitad y por cuartos no están: el simulador no los modela.</p></section></div></div>';
 
     if (hayJug) h += panel('jugadores') + htmlQB + '<div class="dos">' + bloqueJugadores(p) + '</div></div>';
 
@@ -539,12 +557,12 @@
   function vistaPicks() {
     var lista = partidosDeJornada().filter(function (p) { return !p.jugado && !enJuego(p); }), todos = [];
     lista.forEach(function (p) { todos = todos.concat(picksDe(p)); });
-    var filtros = [['todos', 'Todos'], ['partido', 'Ganador y hándicap'], ['total', 'Puntos'], ['td', 'Anotadores'], ['qb', 'Quarterbacks']];
+    var filtros = [['todos', 'Todos'], ['partido', 'Ganador y hándicap'], ['total', 'Puntos'], ['anot', 'Touchdowns y goles de campo'], ['td', 'Anotadores'], ['qb', 'Quarterbacks']];
     var ver = todos.filter(function (k) { return E.filtro === 'todos' || k.tipo === E.filtro; }).sort(function (a, b) { return b.prob - a.prob; }).slice(0, 50);
     vista.innerHTML = '<div class="fila">' + selectorJornada() + '<div class="segmento" role="group" aria-label="Tipo de pick">' + filtros.map(function (f) {
       return '<button data-f="' + f[0] + '" aria-pressed="' + (E.filtro === f[0]) + '">' + f[1] + '</button>'; }).join('') + '</div></div>' +
       (ver.length ? '<section class="tarjeta"><h2>Los picks más probables de la jornada</h2>' +
-        '<p class="tenue">Solo mercados que ofrecen las casas: ganador, hándicap, puntos del partido y de cada equipo, anotador de touchdown y pases de touchdown del quarterback. A la derecha, la cuota justa: lo mínimo que debería pagar tu casa. Toca un pick para abrir su partido.</p>' +
+        '<p class="tenue">Solo mercados que ofrecen las casas: ganador, hándicap, puntos y touchdowns del partido y de cada equipo, goles de campo, anotador de touchdown y pases de touchdown del quarterback. A la derecha, la cuota justa: lo mínimo que debería pagar tu casa. Toca un pick para abrir su partido.</p>' +
         '<ul class="picks grande">' + ver.map(function (k, i) { return filaPick(k, true, i); }).join('') + '</ul></section>' :
         '<p class="aviso">' + (lista.length ? 'No hay picks de este tipo para la jornada.' : 'No quedan partidos por empezar en esta jornada. Mira sus resultados en la pestaña Aciertos.') + '</p>') +
       '<p class="aviso">Probabilidad alta no es lo mismo que apuesta buena: las casas ya pagan poco por lo probable. El hándicap y el total son los de cierre del mercado y pueden diferir medio punto de los de tu casa; dentro de cada partido puedes cambiar la línea.</p>';
@@ -558,7 +576,7 @@
 
   // ---------- vista: aciertos ----------
   function vistaAciertos() {
-    var nombres = { partido: 'Ganador y hándicap', total: 'Puntos del partido y de equipo', td: 'Anotador de touchdown', qb: 'Pases de touchdown del quarterback' };
+    var nombres = { partido: 'Ganador y hándicap', total: 'Puntos del partido y de equipo', anot: 'Touchdowns y goles de campo del partido', td: 'Anotador de touchdown', qb: 'Pases de touchdown del quarterback' };
     var porTipo = {}, mejores = { n: 0, ok: 0, p: 0 }, todo = { n: 0, ok: 0, p: 0 }, guardados = { n: 0, ok: 0, p: 0 }, rehechos = { n: 0, ok: 0, p: 0 }, semanas = {}, pendientes = 0;
     function sumar(o, k) { o.n++; o.p += k.p; if (k.ok) o.ok++; }
     Object.keys(E.hist).forEach(function (id) {
@@ -695,6 +713,7 @@
       '<li><b>Circunstancias.</b> Quarterback anunciado, descartados por lesión según su posición, ventaja de local, semana libre previa y estadio techado.</li>' +
       '<li><b>Simulación.</b> Cada partido se juega miles de veces, serie ofensiva por serie: touchdown, gol de campo o nada; punto extra o conversión de 2; decisiones de final de partido y prórroga.</li>' +
       '<li><b>Jugadores.</b> La proyección parte de sus últimos 10 partidos (los recientes pesan más), se acerca un poco al promedio para no fiarse de rachas y se ajusta por lo que concede la defensa rival.</li>' +
+      '<li><b>Touchdowns y goles de campo.</b> Se cuentan en cada simulación. Comparado con 855 partidos reales: 5.02 touchdowns por partido simulados contra 5.03 reales, y 3.44 goles de campo contra 3.40.</li>' +
       '<li><b>Picks.</b> La cuota justa es 1 ÷ probabilidad, sin margen de la casa.</li></ul></section>' +
       '<section class="tarjeta"><h3>Lo que el modelo no sabe</h3><ul class="lista">' +
       '<li>Noticias: no lee prensa ni redes. Para eso están «Tu información» en cada partido y la línea del mercado.</li>' +

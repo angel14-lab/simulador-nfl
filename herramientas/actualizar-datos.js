@@ -9,7 +9,7 @@ const PARTIDOS = 'https://raw.githubusercontent.com/nflverse/nfldata/master/data
 const PUBLICADOS = 'https://github.com/nflverse/nflverse-data/releases/download/';
 const COLUMNAS = ['game_id', 'season', 'game_type', 'week', 'gameday', 'gametime', 'away_team', 'away_score', 'home_team', 'home_score',
   'location', 'overtime', 'away_moneyline', 'home_moneyline', 'spread_line', 'total_line', 'away_qb_name', 'home_qb_name', 'stadium',
-  'away_qb_id', 'home_qb_id', 'away_rest', 'home_rest', 'roof', 'away_epa', 'home_epa', 'away_bajas', 'home_bajas'];
+  'away_qb_id', 'home_qb_id', 'away_rest', 'home_rest', 'roof', 'away_epa', 'home_epa', 'away_bajas', 'home_bajas', 'away_td', 'home_td', 'fg'];
 const DESDE = 2010, carpeta = process.argv[2];
 const ATAQUE = ['WR', 'RB', 'TE'], LINEA = ['T', 'G', 'C', 'OT', 'OG', 'OL'], NO_CUENTA = ['QB', 'K', 'P', 'LS', 'FB'];
 const alias = t => M.ALIAS[t] || t;
@@ -69,10 +69,13 @@ async function guardarJugadores(ultima, datos) {
   const filas = M.leerCSV(await leer('games.csv', PARTIDOS)).filter(f => Number(f.season) >= DESDE);
   if (filas.length < 4000) throw new Error('games.csv incompleto');
   const ultima = Math.max(...filas.map(f => Number(f.season)));
-  const epa = {}, bajas = {}, parte = {};
+  const epa = {}, bajas = {}, parte = {}, tds = {}, goles = {};
   for (let a = DESDE; a <= ultima; a++) {
     const viejo = a < ultima; // la temporada en curso puede no tener archivos todavía
     M.leerCSV(await leer(`st_${a}.csv`, `${PUBLICADOS}stats_team/stats_team_week_${a}.csv`, !viejo)).forEach(r => {
+      const n = k => Number(r[k]) || 0; // touchdowns y goles de campo reales, para calificar esos mercados
+      tds[r.game_id + '|' + alias(r.team)] = n('passing_tds') + n('rushing_tds') + n('special_teams_tds') + n('def_tds') + n('fumble_recovery_tds');
+      goles[r.game_id] = (goles[r.game_id] || 0) + n('fg_made');
       if (r.passing_epa === '' || r.passing_epa === 'NA') return;
       epa[r.game_id + '|' + alias(r.team)] = ((Number(r.passing_epa) || 0) + (Number(r.rushing_epa) || 0)).toFixed(2);
     });
@@ -90,6 +93,8 @@ async function guardarJugadores(ultima, datos) {
     const cuenta = e => (bajas[f.season + '|' + Number(f.week) + '|' + alias(e)] || [0, 0, 0]).join('|');
     f.away_epa = epa[f.game_id + '|' + alias(f.away_team)] || ''; f.home_epa = epa[f.game_id + '|' + alias(f.home_team)] || '';
     f.away_bajas = cuenta(f.away_team); f.home_bajas = cuenta(f.home_team);
+    const tv = tds[f.game_id + '|' + alias(f.away_team)], tl = tds[f.game_id + '|' + alias(f.home_team)];
+    f.away_td = tv == null ? '' : String(tv); f.home_td = tl == null ? '' : String(tl); f.fg = tv == null || tl == null ? '' : String(goles[f.game_id] || 0);
   });
   const celda = v => /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
   const salida = [COLUMNAS.join(',')].concat(filas.map(f => COLUMNAS.map(c => celda(f[c] === 'NA' ? '' : f[c] || '')).join(','))).join('\n') + '\n';

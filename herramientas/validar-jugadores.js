@@ -1,7 +1,7 @@
 // Comprueba las proyecciones de jugadores contra lo que pasó de verdad y guarda datos/calibracion-jugadores.json.
 // Cada predicción usa solo partidos anteriores.  Uso: node validar-jugadores.js [carpeta con pl_AAAA.csv]
 const fs = require('fs'), path = require('path');
-const M = require('../modelo.js');
+const M = require('../modelo.js'), P = require('../picks.js');
 const PUBLICADOS = 'https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_week_';
 const DESDE = 2022, EVALUAR = [2023, 2024, 2025], carpeta = process.argv[2];
 const UMBRALES = { pase: [175, 200, 225, 250, 275, 300], carrera: [25, 40, 50, 60, 75, 100], recepcion: [25, 40, 50, 60, 75, 100], atrapadas: [2, 3, 4, 5, 6, 7] };
@@ -45,8 +45,8 @@ const REAL = { pase: 4, carrera: 7, recepcion: 11, atrapadas: 10 };
     const pr = M.proyectar({ p: f.p, j: h.j.slice(-10) }, f.g[0], datos, f.g[2]);
     if (!pr) continue;
     Object.keys(UMBRALES).forEach(k => { if (pr[k]) UMBRALES[k].forEach(u => anotar(k, M.probAlMenos(pr[k].m, pr[k].sd, u), f.g[REAL[k]] >= u)); });
-    if (pr.td != null) anotar('td', M.probPoisson(pr.td, 1), f.g[8] + f.g[12] >= 1);
-    if (pr.tdPase != null) [1, 2, 3].forEach(u => anotar('tdPase', M.probPoisson(pr.tdPase, u), f.g[5] >= u));
+    if (pr.td != null) anotar('td', P.probJugador(pr, 'td', 1), f.g[8] + f.g[12] >= 1);
+    if (pr.tdPase != null) [1, 2, 3].forEach(u => anotar('tdPase', P.probJugador(pr, 'tdPase', u), f.g[5] >= u));
   }
   const salida = { temporadas: EVALUAR, predicciones: total.n, tipos: {} };
   Object.keys(cubos).forEach(t => {
