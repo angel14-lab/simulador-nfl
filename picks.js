@@ -83,6 +83,14 @@
     for (i = 0; i < 40; i++) { x = (a + b) / 2; if (M.probAlMenos(e.m, e.sd, x) > 0.5) a = x; else b = x; }
     return Math.max(0.5, Math.round(a) - 0.5);
   }
+  /* Probabilidad de «más de» sobre la línea real de una casa. La línea principal de una casa ya recoge
+     información que el modelo no tiene (rol del jugador, plan de juego, noticias), así que no se usa
+     el modelo solo: se promedia con la probabilidad que implican las cuotas, quitándoles el margen. */
+  function probConCasa(pr, k, real) {
+    var modelo = probJugador(pr, k, Math.floor(real.l) + 1), casa = null;
+    if (real.mas > 1 && real.menos > 1) casa = (1 / real.mas) / (1 / real.mas + 1 / real.menos);
+    return { mas: casa == null ? modelo : (modelo + casa) / 2, modelo: modelo, casa: casa };
+  }
   // Fracción de simulaciones en las que una cuenta (touchdowns, goles de campo) supera la línea.
   function masQue(sim, valor, linea) {
     var c = 0, i;
@@ -140,22 +148,25 @@
       var l = lineaEquipo(p, x[0], esp), q = masDe(sim, x[0], l);
       poner('total', x[1], x[1] + (q >= 0.5 ? ' más de ' : ' menos de ') + l, 'puntos del equipo', Math.max(q, 1 - q), { m: 'equipo', eq: x[1], mas: q >= 0.5, linea: l });
       jugadoresDe(ctx, p, x[0], reconstruir).forEach(function (j) {
-        if (j.pr.td != null) poner('td', j.eq, j.j.n, 'anota touchdown', probJugador(j.pr, 'td', 1), { m: 'td', id: j.j.id }, { duda: j.duda, dos: probJugador(j.pr, 'td', 2) });
+        var rtd = ctx.lineas && ctx.lineas[p.id] && ctx.lineas[p.id].jug ? ctx.lineas[p.id].jug[normalizar(j.j.n)] : null;
+        if (j.pr.td != null) poner('td', j.eq, j.j.n, 'anota touchdown', probJugador(j.pr, 'td', 1), { m: 'td', id: j.j.id }, { duda: j.duda, dos: probJugador(j.pr, 'td', 2), cuotaReal: rtd && rtd.td ? rtd.td.si : null });
         /* Yardas: el hito más exigente que el modelo da al 70% o más, y solo si el jugador ya lo viene
            logrando en la mayoría de sus últimos partidos. En la validación (2023-2026) estos picks
            acertaron 78% en pase, 75% por tierra y 75% en recepción. */
-        var reales = ctx.lineas && ctx.lineas[p.id] && ctx.lineas[p.id].jug ? ctx.lineas[p.id].jug[normalizar(j.j.n)] : null, casa = reales ? ctx.lineas[p.id].casaJugadores || 'la casa' : '';
+        var hayReales = !!(ctx.lineas && ctx.lineas[p.id] && ctx.lineas[p.id].jug && Object.keys(ctx.lineas[p.id].jug).length);
+        var reales = hayReales ? ctx.lineas[p.id].jug[normalizar(j.j.n)] : null, casa = reales ? ctx.lineas[p.id].casaJugadores || 'la casa' : '';
         Object.keys(HITOS).forEach(function (k) {
           if (!j.pr[k]) return;
           var hito = null, logrados;
           if (reales && reales[k]) {
             // Hay línea real de una casa: el pick se hace sobre ella y no sobre un hito propio.
-            var real = reales[k], mas = M.probAlMenos(j.pr[k].m, j.pr[k].sd, Math.floor(real.l) + 1), arriba = mas >= 0.5;
+            var real = reales[k], mas = probConCasa(j.pr, k, real).mas, arriba = mas >= 0.5;
             logrados = j.previos.filter(function (g) { return arriba ? g[HITOS[k].col] > real.l : g[HITOS[k].col] < real.l; }).length;
             poner('jug', j.eq, j.j.n, (arriba ? 'más de ' : 'menos de ') + real.l + ' ' + HITOS[k].nombre, Math.max(mas, 1 - mas), { m: 'yardas', id: j.j.id, est: k, linea: real.l, mas: arriba },
               { duda: j.duda, cuotaReal: arriba ? real.mas : real.menos, resp: 'línea de ' + casa + ' · lo logró en ' + logrados + ' de sus últimos ' + j.previos.length });
             return;
           }
+          if (hayReales) return; // la casa ya publicó líneas de este partido y no ofrece esta: no se inventa un hito
           HITOS[k].escala.forEach(function (u) { var q = M.probAlMenos(j.pr[k].m, j.pr[k].sd, u); if (q >= SEGURO) hito = { u: u, q: q }; });
           if (!hito) return;
           logrados = j.previos.filter(function (g) { return g[HITOS[k].col] >= hito.u; }).length;
@@ -242,5 +253,5 @@
   }
 
   return { NOMBRES: NOMBRES, MARGEN_CONGELAR: MARGEN_CONGELAR, MINIMO: MINIMO, SEGURO: SEGURO, MAXIMO: MAXIMO, normalizar: normalizar, indexar: indexar, parte: parte, jugadoresDe: jugadoresDe, probJugador: probJugador,
-    lineaEquipo: lineaEquipo, masDe: masDe, masQue: masQue, CUENTAS: CUENTAS, lineaJusta: lineaJusta, picksDe: picksDe, inicio: inicio, calificar: calificar, textoHandicap: textoHandicap };
+    lineaEquipo: lineaEquipo, masDe: masDe, masQue: masQue, CUENTAS: CUENTAS, lineaJusta: lineaJusta, probConCasa: probConCasa, picksDe: picksDe, inicio: inicio, calificar: calificar, textoHandicap: textoHandicap };
 });

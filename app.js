@@ -536,7 +536,9 @@
         ESTAD_LINEA.forEach(function (e) {
           var l = mias[e[0]], mas;
           if (l == null || x.pr[e[0]] == null) return;
-          mas = probJugador(x.pr, e[0], Math.floor(l) + 1);
+          var rj = E.reales[p.id] && E.reales[p.id].jug ? E.reales[p.id].jug[P.normalizar(x.j.n)] : null;
+          // Si la línea escrita es la misma que la de la casa, se usa también lo que dicen sus cuotas.
+          mas = rj && rj[e[0]] && rj[e[0]].l === l && e[0] !== 'tdPase' ? P.probConCasa(x.pr, e[0], rj[e[0]]).mas : probJugador(x.pr, e[0], Math.floor(l) + 1);
           filas.push({ eq: x.eq, t: x.j.n, q: Math.max(mas, 1 - mas), que: (mas >= 0.5 ? 'más de ' : 'menos de ') + l + ' ' + e[1].toLowerCase() });
         });
       });
@@ -802,6 +804,7 @@
       '<li><b>Jugadores.</b> La proyección parte de sus últimos 10 partidos (los recientes pesan más), se acerca un poco al promedio para no fiarse de rachas y se ajusta por lo que concede la defensa rival.</li>' +
       '<li><b>Touchdowns y goles de campo.</b> Se cuentan en cada simulación. Comparado con 855 partidos reales: 5.02 touchdowns por partido simulados contra 5.03 reales, y 3.44 goles de campo contra 3.40.</li>' +
       '<li><b>Picks de yardas.</b> Se propone el hito más exigente que el modelo da al 70% o más, y solo si el jugador ya lo logró en al menos el 70% de sus últimos partidos. Con esa regla, de 2023 a 2026 acertaron 78% en yardas de pase (976 casos), 75% por tierra (878) y 75% en recepción (1 532).</li>' +
+      '<li><b>Líneas reales.</b> Cuando hay línea de una casa para un jugador, el pick se hace sobre esa línea y la probabilidad es el promedio entre el modelo y lo que implican las cuotas de la casa. No hay datos históricos de esas líneas para comprobar ese promedio: es una medida de prudencia, no un resultado validado.</li>' +
       '<li><b>Picks.</b> Solo se muestran entre 58% y 80%. La cuota justa es 1 ÷ probabilidad, sin margen de la casa.</li></ul></section>' +
       '<section class="tarjeta"><h3>Lo que el modelo no sabe</h3><ul class="lista">' +
       '<li>Noticias: no lee prensa ni redes. Para eso están «Tu información» en cada partido y la línea del mercado.</li>' +
