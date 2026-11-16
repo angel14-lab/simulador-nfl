@@ -319,7 +319,7 @@
     // El detalle se reparte en secciones para no tener que recorrer una página larga.
     var hayJug = !!(p && !p.jugado && (jugadoresDe(p, 'v').length || jugadoresDe(p, 'l').length)), htmlQB = '';
     var reg = p ? congelado(p) : null;
-    var secciones = (p && (!p.jugado || reg) ? [['picks', reg && reg.calificado ? 'Picks y aciertos' : 'Picks']] : []).concat([['mercados', 'Hándicap y puntos']], hayJug ? [['jugadores', 'Jugadores']] : [], [['equipos', 'Equipos y ajustes']]);
+    var secciones = (p && (!p.jugado || reg) ? [['picks', reg && reg.calificado ? 'Picks y aciertos' : 'Picks']] : []).concat(p && !p.jugado ? [['lineas', 'Tus líneas de Betano']] : [], [['mercados', 'Hándicap y puntos']], hayJug ? [['jugadores', 'Jugadores']] : [], [['equipos', 'Equipos y ajustes']]);
     if (!secciones.some(function (x) { return x[0] === c.pestana; })) c.pestana = secciones[0][0];
     function panel(id) { return '<div class="panel" data-panel="' + id + '"' + (id === c.pestana ? '' : ' hidden') + '>'; }
     h += '<div class="segmento secciones" role="tablist">' + secciones.map(function (x) { return '<button role="tab" data-sec="' + x[0] + '" aria-selected="' + (x[0] === c.pestana) + '">' + x[1] + '</button>'; }).join('') + '</div>';
@@ -346,6 +346,7 @@
         }).join('') + '</table></div><p class="tenue" style="margin-top:8px">Junto a cada probabilidad, su cuota justa. «Menos de» es el resto hasta 100%. Para otras líneas (yardas, recepciones) usa la calculadora de abajo.</p></section></div>';
     }
 
+    if (p && !p.jugado) h += panel('lineas') + bloqueLineas(p, c) + '</div>';
     h += panel('mercados') + '<div class="dos"><section class="tarjeta"><h3>Hándicap</h3>' +
       '<label>Hándicap de ' + c.local + ' (negativo = favorito)<span class="paso"><button data-paso="h" data-d="-0.5" aria-label="Bajar medio punto">−</button><input type="number" step="0.5" id="in-h" value="' + hIni + '"><button data-paso="h" data-d="0.5" aria-label="Subir medio punto">+</button></span></label>' +
       '<div id="res-h"></div><div class="leyenda"><span><i class="punto v"></i>gana ' + c.visita + '</span><span><i class="punto l"></i>gana ' + c.local + '</span></div><div id="graf-h"></div>' +
@@ -421,6 +422,7 @@
     ['aj-v', 'aj-l', 'aj-w'].forEach(function (id) { var el = caja.querySelector('#' + id); if (el) el.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') reajustar(); }); });
     caja.querySelector('#aj-0').addEventListener('click', function () { aj.visita = aj.local = aj.viento = 0; c.vista = {}; pintarDetalle(caja, c); });
     if (p) activarCalculadora(caja, p);
+    if (p && !p.jugado) activarLineas(caja, p, c, sim);
 
     var inH = caja.querySelector('#in-h'), inT = caja.querySelector('#in-t');
     function caso(valor, texto, extra) { return '<div><b>' + valor + '</b><span>' + texto + (extra ? '<br>' + extra : '') + '</span></div>'; }
@@ -474,6 +476,85 @@
     });
     pintarH(); pintarT(); pintarE('v'); pintarE('l');
   }
+  // ---------- tus líneas: las que ofrece tu casa, escritas a mano ----------
+  // Las casas no publican sus líneas en una fuente abierta, así que se escriben aquí y se guardan en este navegador.
+  var ESTAD_LINEA = [['pase', 'Yardas de pase'], ['carrera', 'Yardas por tierra'], ['recepcion', 'Yardas de recepción'], ['atrapadas', 'Recepciones'], ['tdPase', 'Pases de TD']];
+  function leerLineas(id) {
+    if (E.lineas && E.lineas[id]) return E.lineas[id];
+    E.lineas = E.lineas || {};
+    try { E.lineas[id] = JSON.parse(localStorage.getItem('lineas:' + id)) || { m: {}, j: {} }; } catch (e) { E.lineas[id] = { m: {}, j: {} }; }
+    return E.lineas[id];
+  }
+  function guardarLineas(id) { try { localStorage.setItem('lineas:' + id, JSON.stringify(E.lineas[id])); } catch (e) { /* sin almacenamiento: se conservan mientras la página esté abierta */ } }
+  function mercadosLinea(p, c) {
+    return [
+      { k: 'h', nombre: 'Hándicap de ' + c.local, sugerida: p.linea != null ? -p.linea : null },
+      { k: 't', nombre: 'Total de puntos', sugerida: p.lineaTotal },
+      { k: 'ev', nombre: 'Puntos de ' + c.visita }, { k: 'el', nombre: 'Puntos de ' + c.local },
+      { k: 'tds', nombre: 'Touchdowns del partido' }, { k: 'tdv', nombre: 'Touchdowns de ' + c.visita }, { k: 'tdl', nombre: 'Touchdowns de ' + c.local },
+      { k: 'fg', nombre: 'Goles de campo del partido' }
+    ];
+  }
+  function bloqueLineas(p, c) {
+    var L = leerLineas(p.id), jug = jugadoresDe(p, 'v').concat(jugadoresDe(p, 'l'));
+    function campo(clave, valor, sugerida) { return '<input class="lin" type="number" step="0.5" data-lin="' + clave + '" value="' + (valor != null ? valor : '') + '"' + (sugerida != null ? ' placeholder="' + sugerida + '"' : '') + ' aria-label="Línea">'; }
+    return '<p class="aviso">Escribe aquí las líneas que ves en Betano y la página te dice qué lado es más probable con esa línea exacta. Solo rellena las que te interesen; se guardan en este navegador.</p>' +
+      '<div class="dos"><section class="tarjeta"><h3>Líneas del partido</h3><table>' + mercadosLinea(p, c).map(function (m) {
+        return '<tr><td>' + m.nombre + '</td><td>' + campo('m:' + m.k, L.m[m.k], m.sugerida) + '</td></tr>'; }).join('') + '</table>' +
+      '<p class="tenue" style="margin-top:8px">En gris, la línea de cierre del mercado cuando la conozco. Hándicap negativo = favorito.</p></section>' +
+      '<section class="tarjeta"><h3>Con tus líneas</h3><div id="lin-res"></div></section></div>' +
+      (jug.length ? '<div class="dos"><section class="tarjeta ancho"><h3>Líneas de jugadores</h3><div class="desborde"><table><tr><th>Jugador</th>' + ESTAD_LINEA.map(function (e) { return '<th>' + e[1] + '</th>'; }).join('') + '</tr>' +
+        jug.map(function (x) {
+          var mias = L.j[x.j.id] || {};
+          return '<tr><td>' + escudo(x.eq) + ' ' + esc(x.j.n) + ' <span class="tenue">' + x.j.p + '</span></td>' + ESTAD_LINEA.map(function (e) {
+            if (x.pr[e[0]] == null) return '<td><span class="tenue">·</span></td>';
+            return '<td>' + campo('j:' + x.j.id + ':' + e[0], mias[e[0]], e[0] === 'tdPase' ? 1.5 : P.lineaJusta(x.pr[e[0]])) + '</td>'; }).join('') + '</tr>';
+        }).join('') + '</table></div><p class="tenue" style="margin-top:8px">En gris, la línea justa según el modelo. Escribe encima la de Betano.</p></section></div>' : '');
+  }
+  function activarLineas(caja, p, c, sim) {
+    var L = leerLineas(p.id), jug = jugadoresDe(p, 'v').concat(jugadoresDe(p, 'l')), res = caja.querySelector('#lin-res');
+    // Fracción de simulaciones por encima y por debajo de una línea, sin contar las que caen justo en ella.
+    function lados(valor, l) { var mas = 0, menos = 0, i, v; for (i = 0; i < sim.n; i++) { v = valor(i); if (v > l) mas++; else if (v < l) menos++; } return { mas: mas / ((mas + menos) || 1), menos: menos / ((mas + menos) || 1) }; }
+    var cuentas = {
+      t: function (i) { return sim.local[i] + sim.visita[i]; }, ev: function (i) { return sim.visita[i]; }, el: function (i) { return sim.local[i]; },
+      tds: P.CUENTAS.tds(sim), tdv: P.CUENTAS.tdsVisita(sim), tdl: P.CUENTAS.tdsLocal(sim), fg: P.CUENTAS.fg(sim)
+    };
+    function pintar() {
+      var filas = [];
+      mercadosLinea(p, c).forEach(function (m) {
+        var l = L.m[m.k], r;
+        if (l == null) return;
+        if (m.k === 'h') { r = lados(function (i) { return sim.local[i] - sim.visita[i] + l; }, 0); filas.push(r.mas >= r.menos ? { eq: c.local, t: textoHandicap(c.local, l), q: r.mas, que: 'hándicap' } : { eq: c.visita, t: textoHandicap(c.visita, -l), q: r.menos, que: 'hándicap' }); return; }
+        r = lados(cuentas[m.k], l);
+        filas.push({ t: (r.mas >= r.menos ? 'Más de ' : 'Menos de ') + l, q: Math.max(r.mas, r.menos), que: m.nombre.charAt(0).toLowerCase() + m.nombre.slice(1) });
+      });
+      jug.forEach(function (x) {
+        var mias = L.j[x.j.id] || {};
+        ESTAD_LINEA.forEach(function (e) {
+          var l = mias[e[0]], mas;
+          if (l == null || x.pr[e[0]] == null) return;
+          mas = probJugador(x.pr, e[0], Math.floor(l) + 1);
+          filas.push({ eq: x.eq, t: x.j.n, q: Math.max(mas, 1 - mas), que: (mas >= 0.5 ? 'más de ' : 'menos de ') + l + ' ' + e[1].toLowerCase() });
+        });
+      });
+      filas.sort(function (a, b) { return b.q - a.q; });
+      res.innerHTML = filas.length ? '<ul class="picks">' + filas.map(function (f) {
+        return '<li class="pick"><span class="pick-prob">' + pct(f.q, 0) + '</span><span class="pick-cuerpo">' + (f.eq ? escudo(f.eq) + ' ' : '') + '<b>' + esc(f.t) + '</b> ' + esc(f.que) +
+          (f.q < P.MINIMO ? ' <span class="etiqueta">muy parejo</span>' : '') + '</span><span class="pick-cuota"><small>cuota justa</small>' + cuota(f.q) + '</span></li>'; }).join('') + '</ul>' +
+        '<p class="tenue">Para cada línea se muestra el lado más probable. Si la cuota de Betano es mayor que la justa, mejor todavía.</p>' :
+        '<p class="tenue">Todavía no has escrito ninguna línea.</p>';
+    }
+    caja.querySelectorAll('[data-lin]').forEach(function (en) {
+      en.addEventListener('input', function () {
+        var k = en.getAttribute('data-lin').split(':'), v = en.value === '' ? null : Number(en.value);
+        if (k[0] === 'm') { if (v == null) delete L.m[k[1]]; else L.m[k[1]] = v; }
+        else { L.j[k[1]] = L.j[k[1]] || {}; if (v == null) delete L.j[k[1]][k[2]]; else L.j[k[1]][k[2]] = v; }
+        guardarLineas(p.id); pintar();
+      });
+    });
+    pintar();
+  }
+
   function abrirPartido(p) {
     E.ajustes[p.id] = E.ajustes[p.id] || {};
     pintarDetalle($('dialogo-cuerpo'), { visita: p.visita, local: p.local, neutral: p.neutral, partido: p, pred: p.pred, ajuste: E.ajustes[p.id],
