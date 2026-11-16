@@ -15,6 +15,8 @@
   };
   var POISSON = { td: 1, tdPase: 1 };
   var MARGEN_CONGELAR = 10 * 60 * 1000; // los picks dejan de moverse 10 minutos antes del inicio
+  var MINIMO = 0.58;  // por debajo de esto un pick es casi una moneda al aire y no se muestra como pick
+  var SEGURO = 0.70;  // probabilidad que se busca al elegir una línea alternativa
 
   function signo(x) { return (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).toString(); }
   function textoHandicap(equipo, h) { return equipo + ' ' + (h === 0 ? 'PK' : signo(h)); }
@@ -133,6 +135,47 @@
         }
       });
     });
+    /* Picks «seguros»: en los mercados con líneas alternativas se busca la línea más exigente que
+       todavía se cumple al menos el 70% de las veces. */
+    var i, r, mejorL = null, mejorV = null, masT = null, menosT = null, centroH = p.linea != null ? -p.linea : -Math.round(esp.local - esp.visita), hl, lt2;
+    for (i = -10; i <= 10; i++) {
+      hl = Math.floor(centroH) + 0.5 + i; r = M.cubrir(sim, hl);
+      if (r.local >= SEGURO && !mejorL) mejorL = { h: hl, q: r.local };            // el primero es el más exigente para el local
+      if (r.visita >= SEGURO) mejorV = { h: -hl, q: r.visita };                     // el último es el más exigente para la visita
+    }
+    function alterno(eq, x) {
+      if (x && !(p.linea != null && lista.some(function (k) { return k.m.m === 'handicap' && k.m.eq === eq && k.m.linea === x.h; })))
+        poner('partido', eq, textoHandicap(eq, x.h), 'hándicap alternativo', x.q, { m: 'handicap', eq: eq, linea: x.h });
+    }
+    alterno(p.local, mejorL); alterno(p.visita, mejorV);
+    var centroT = p.lineaTotal != null ? p.lineaTotal : esp.local + esp.visita;
+    for (i = -10; i <= 10; i++) {
+      lt2 = Math.floor(centroT) + 0.5 + i; r = M.totales(sim, lt2);
+      if (r.mas >= SEGURO) masT = { l: lt2, q: r.mas };
+      if (r.menos >= SEGURO && !menosT) menosT = { l: lt2, q: r.menos };
+    }
+    if (masT && masT.l !== p.lineaTotal) poner('total', null, 'Más de ' + masT.l, 'puntos en el partido (línea alternativa)', masT.q, { m: 'total', mas: true, linea: masT.l });
+    if (menosT && menosT.l !== p.lineaTotal) poner('total', null, 'Menos de ' + menosT.l, 'puntos en el partido (línea alternativa)', menosT.q, { m: 'total', mas: false, linea: menosT.l });
+    function escalera(cuenta, lineas, hacer) {
+      var mas = null, menos = null;
+      lineas.forEach(function (l) { var q = masQue(sim, cuenta, l); if (q >= SEGURO) mas = { l: l, q: q }; if (1 - q >= SEGURO && !menos) menos = { l: l, q: 1 - q }; });
+      if (mas) hacer(true, mas); if (menos) hacer(false, menos);
+    }
+    function yaEsta(m) { return lista.some(function (k) { return k.m.m === m.m && k.m.eq === m.eq && k.m.linea === m.linea && k.m.mas === m.mas; }); }
+    escalera(CUENTAS.tds(sim), [2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5], function (mas, x) {
+      var m = { m: 'tds', mas: mas, linea: x.l };
+      if (!yaEsta(m)) poner('anot', null, (mas ? 'Más de ' : 'Menos de ') + x.l, 'touchdowns en el partido', x.q, m);
+    });
+    [['l', p.local], ['v', p.visita]].forEach(function (x) {
+      escalera(x[0] === 'l' ? CUENTAS.tdsLocal(sim) : CUENTAS.tdsVisita(sim), [1.5, 2.5, 3.5], function (mas, y) {
+        var m = { m: 'tdsEquipo', eq: x[1], mas: mas, linea: y.l };
+        if (!yaEsta(m)) poner('anot', x[1], x[1] + (mas ? ' más de ' : ' menos de ') + y.l, 'touchdowns del equipo', y.q, m);
+      });
+      jugadoresDe(ctx, p, x[0], reconstruir).forEach(function (j) {
+        var uno = j.pr.tdPase != null ? probJugador(j.pr, 'tdPase', 1) : 0;
+        if (uno >= SEGURO) poner('qb', j.eq, j.j.n, 'más de 0.5 pases de touchdown', uno, { m: 'tdPase', id: j.j.id, mas: true, linea: 0.5 }, { duda: j.duda });
+      });
+    });
     return lista.sort(function (a, b) { return b.prob - a.prob; });
   }
 
@@ -166,6 +209,6 @@
     return null;
   }
 
-  return { NOMBRES: NOMBRES, MARGEN_CONGELAR: MARGEN_CONGELAR, indexar: indexar, parte: parte, jugadoresDe: jugadoresDe, probJugador: probJugador,
+  return { NOMBRES: NOMBRES, MARGEN_CONGELAR: MARGEN_CONGELAR, MINIMO: MINIMO, SEGURO: SEGURO, indexar: indexar, parte: parte, jugadoresDe: jugadoresDe, probJugador: probJugador,
     lineaEquipo: lineaEquipo, masDe: masDe, masQue: masQue, CUENTAS: CUENTAS, lineaJusta: lineaJusta, picksDe: picksDe, inicio: inicio, calificar: calificar, textoHandicap: textoHandicap };
 });
