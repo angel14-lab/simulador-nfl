@@ -17,7 +17,7 @@ let congelados = 0, calificados = 0;
 const porId = {}; (jug ? jug.jugadores : []).forEach(j => { porId[j.id] = j; });
 const estadDe = p => id => {
   const g = porId[id] && porId[id].j.find(x => x[0] === p.temporada && x[1] === p.semana);
-  return g ? { td: g[8] + g[12], tdPase: g[5] } : null;
+  return g ? { td: g[8] + g[12], tdPase: g[5], pase: g[4], carrera: g[7], recepcion: g[11] } : null;
 };
 const hayEstadisticas = p => [p.local, p.visita].every(e => indice.semanas[e] && indice.semanas[e][p.semana]) && jug && jug.temporada === p.temporada && p.tdLocal != null;
 
@@ -30,7 +30,7 @@ function pronosticar(p, ini, reconstruir) {
     temporada: p.temporada, semana: p.semana, visita: p.visita, local: p.local, inicio: new Date(ini).toISOString(),
     pV: r3(sim.pVisita), pL: r3(sim.pLocal), mV: Math.round(sim.mediaVisita * 10) / 10, mL: Math.round(sim.mediaLocal * 10) / 10,
     picks: todos.filter(k => k.tipo !== 'td').concat(anotadores).sort((a, b) => b.prob - a.prob)
-      .map(k => ({ t: k.tipo, eq: k.eq, q: k.quien, que: k.que, p: r3(k.prob), m: k.m }))
+      .map(k => Object.assign({ t: k.tipo, eq: k.eq, q: k.quien, que: k.que, p: r3(k.prob), m: k.m }, k.resp ? { r: k.resp } : {}))
   };
 }
 function calificar(reg, p) {

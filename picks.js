@@ -17,6 +17,14 @@
   var MARGEN_CONGELAR = 10 * 60 * 1000; // los picks dejan de moverse 10 minutos antes del inicio
   var MINIMO = 0.58;  // por debajo de esto un pick es casi una moneda al aire y no se muestra como pick
   var SEGURO = 0.70;  // probabilidad que se busca al elegir una línea alternativa
+  var MAXIMO = 0.80;  // por encima de esto la cuota justa baja de 1.25 y el pick deja de interesar
+  var RECIENTE = 0.70; // un hito de yardas solo se propone si el jugador lo logró en esta parte de sus últimos partidos
+  // Hitos de yardas que se proponen como pick, con la columna de los partidos del jugador donde está el dato real.
+  var HITOS = {
+    pase: { nombre: 'yardas de pase', col: 4, escala: [150, 175, 200, 225, 250, 275, 300] },
+    carrera: { nombre: 'yardas por tierra', col: 7, escala: [25, 40, 50, 60, 75, 100] },
+    recepcion: { nombre: 'yardas de recepción', col: 11, escala: [25, 40, 50, 60, 75, 100] }
+  };
 
   function signo(x) { return (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).toString(); }
   function textoHandicap(equipo, h) { return equipo + ' ' + (h === 0 ? 'PK' : signo(h)); }
@@ -51,7 +59,7 @@
       if (j.p === 'QB' ? j.id !== titular : (ult[0] !== ctx.jug.temporada || ult[1] < limite)) return; // suplentes y ausentes recientes
       if (estado[j.n] === 'Out' || estado[j.n] === 'Doubtful') return;
       var pr = M.proyectar({ p: j.p, j: previos }, ctx.jug.temporada, p.jugado ? null : ctx.jug, rival);
-      if (pr) lista.push({ j: j, eq: eq, pr: pr, duda: estado[j.n] === 'Questionable' });
+      if (pr) lista.push({ j: j, eq: eq, pr: pr, previos: previos.slice(-10), duda: estado[j.n] === 'Questionable' });
     });
     function valor(x) { return (x.pr.pase ? 1000 : 0) + (x.pr.carrera ? x.pr.carrera.m : 0) + (x.pr.recepcion ? x.pr.recepcion.m : 0); }
     return lista.sort(function (a, b) { return valor(b) - valor(a); });
@@ -129,10 +137,19 @@
       poner('total', x[1], x[1] + (q >= 0.5 ? ' más de ' : ' menos de ') + l, 'puntos del equipo', Math.max(q, 1 - q), { m: 'equipo', eq: x[1], mas: q >= 0.5, linea: l });
       jugadoresDe(ctx, p, x[0], reconstruir).forEach(function (j) {
         if (j.pr.td != null) poner('td', j.eq, j.j.n, 'anota touchdown', probJugador(j.pr, 'td', 1), { m: 'td', id: j.j.id }, { duda: j.duda, dos: probJugador(j.pr, 'td', 2) });
-        if (j.pr.tdPase != null) {
-          var dos = probJugador(j.pr, 'tdPase', 2);
-          poner('qb', j.eq, j.j.n, (dos >= 0.5 ? 'más de' : 'menos de') + ' 1.5 pases de touchdown', Math.max(dos, 1 - dos), { m: 'tdPase', id: j.j.id, mas: dos >= 0.5, linea: 1.5 }, { duda: j.duda });
-        }
+        /* Yardas: el hito más exigente que el modelo da al 70% o más, y solo si el jugador ya lo viene
+           logrando en la mayoría de sus últimos partidos. En la validación (2023-2026) estos picks
+           acertaron 78% en pase, 75% por tierra y 75% en recepción. */
+        Object.keys(HITOS).forEach(function (k) {
+          if (!j.pr[k]) return;
+          var hito = null, logrados;
+          HITOS[k].escala.forEach(function (u) { var q = M.probAlMenos(j.pr[k].m, j.pr[k].sd, u); if (q >= SEGURO) hito = { u: u, q: q }; });
+          if (!hito) return;
+          logrados = j.previos.filter(function (g) { return g[HITOS[k].col] >= hito.u; }).length;
+          if (logrados / j.previos.length < RECIENTE) return;
+          poner('jug', j.eq, j.j.n, hito.u + '+ ' + HITOS[k].nombre, hito.q, { m: 'yardas', id: j.j.id, est: k, linea: hito.u },
+            { duda: j.duda, resp: 'lo logró en ' + logrados + ' de sus últimos ' + j.previos.length });
+        });
       });
     });
     /* Picks «seguros»: en los mercados con líneas alternativas se busca la línea más exigente que
@@ -144,7 +161,7 @@
       if (r.visita >= SEGURO) mejorV = { h: -hl, q: r.visita };                     // el último es el más exigente para la visita
     }
     function alterno(eq, x) {
-      if (x && !(p.linea != null && lista.some(function (k) { return k.m.m === 'handicap' && k.m.eq === eq && k.m.linea === x.h; })))
+      if (x && Math.abs(x.h) !== 0.5 && !(p.linea != null && lista.some(function (k) { return k.m.m === 'handicap' && k.m.eq === eq && k.m.linea === x.h; })))
         poner('partido', eq, textoHandicap(eq, x.h), 'hándicap alternativo', x.q, { m: 'handicap', eq: eq, linea: x.h });
     }
     alterno(p.local, mejorL); alterno(p.visita, mejorV);
@@ -172,8 +189,9 @@
         if (!yaEsta(m)) poner('anot', x[1], x[1] + (mas ? ' más de ' : ' menos de ') + y.l, 'touchdowns del equipo', y.q, m);
       });
       jugadoresDe(ctx, p, x[0], reconstruir).forEach(function (j) {
-        var uno = j.pr.tdPase != null ? probJugador(j.pr, 'tdPase', 1) : 0;
-        if (uno >= SEGURO) poner('qb', j.eq, j.j.n, 'más de 0.5 pases de touchdown', uno, { m: 'tdPase', id: j.j.id, mas: true, linea: 0.5 }, { duda: j.duda });
+        var uno = j.pr.tdPase != null ? probJugador(j.pr, 'tdPase', 1) : 0, conTd = j.previos.filter(function (g) { return g[5] >= 1; }).length;
+        if (uno >= SEGURO && conTd / j.previos.length >= RECIENTE) poner('jug', j.eq, j.j.n, 'más de 0.5 pases de touchdown', uno, { m: 'tdPase', id: j.j.id, mas: true, linea: 0.5 },
+          { duda: j.duda, resp: 'lo logró en ' + conTd + ' de sus últimos ' + j.previos.length });
       });
     });
     return lista.sort(function (a, b) { return b.prob - a.prob; });
@@ -205,10 +223,11 @@
     e = estad(m.id);
     if (!e) return null;
     if (m.m === 'td') return e.td >= 1;
+    if (m.m === 'yardas') return e[m.est] >= m.linea;
     if (m.m === 'tdPase') return (e.tdPase > m.linea) === m.mas;
     return null;
   }
 
-  return { NOMBRES: NOMBRES, MARGEN_CONGELAR: MARGEN_CONGELAR, MINIMO: MINIMO, SEGURO: SEGURO, indexar: indexar, parte: parte, jugadoresDe: jugadoresDe, probJugador: probJugador,
+  return { NOMBRES: NOMBRES, MARGEN_CONGELAR: MARGEN_CONGELAR, MINIMO: MINIMO, SEGURO: SEGURO, MAXIMO: MAXIMO, indexar: indexar, parte: parte, jugadoresDe: jugadoresDe, probJugador: probJugador,
     lineaEquipo: lineaEquipo, masDe: masDe, masQue: masQue, CUENTAS: CUENTAS, lineaJusta: lineaJusta, picksDe: picksDe, inicio: inicio, calificar: calificar, textoHandicap: textoHandicap };
 });

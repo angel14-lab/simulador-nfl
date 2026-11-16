@@ -150,15 +150,17 @@
   function enJuego(p) { var ini = P.inicio(p); return !p.jugado && ini != null && Date.now() >= ini; }
   function picksCongelados(p, reg) {
     var juego = p.visita + ' en ' + p.local;
-    return reg.picks.map(function (k) { return { tipo: k.t, eq: k.eq, quien: k.q, que: k.que, prob: k.p, ok: k.ok, calificado: !!reg.calificado, juego: juego, p: p }; });
+    return reg.picks.map(function (k) { return { tipo: k.t, eq: k.eq, quien: k.q, que: k.que, prob: k.p, ok: k.ok, resp: k.r, calificado: !!reg.calificado, juego: juego, p: p }; });
   }
+  // Un pick se muestra si no es de anotador y su probabilidad está entre el mínimo y el máximo (cuota justa de 1.25 a 1.72).
+  function enRango(k) { return k.tipo !== 'td' && k.prob >= P.MINIMO && k.prob <= P.MAXIMO; }
   function marca(k) {
     if (!k.calificado) return '';
     return k.ok === true ? ' <span class="etiqueta bien">✓ acertó</span>' : k.ok === false ? ' <span class="etiqueta mal">✗ falló</span>' : ' <span class="etiqueta">anulado</span>';
   }
   function filaPick(k, conJuego, indice) {
     return '<li class="pick"' + (indice != null ? ' data-i="' + indice + '" tabindex="0"' : '') + '><span class="pick-prob">' + pct(k.prob, 0) + '</span><span class="pick-cuerpo">' + (k.eq ? escudo(k.eq) + ' ' : '') + '<b>' + esc(k.quien) + '</b> ' + esc(k.que) +
-      marca(k) + (k.duda ? ' <span class="etiqueta">en duda</span>' : '') + (k.dos != null ? ' <span class="tenue">· 2 o más: ' + pct(k.dos, 0) + '</span>' : '') + (conJuego ? '<br><span class="tenue">' + esc(k.juego) + '</span>' : '') +
+      marca(k) + (k.duda ? ' <span class="etiqueta">en duda</span>' : '') + (k.dos != null ? ' <span class="tenue">· 2 o más: ' + pct(k.dos, 0) + '</span>' : '') + (k.resp ? ' <span class="tenue">· ' + esc(k.resp) + '</span>' : '') + (conJuego ? '<br><span class="tenue">' + esc(k.juego) + '</span>' : '') +
       '</span><span class="pick-cuota"><small>cuota justa</small>' + cuota(k.prob) + '</span></li>';
   }
 
@@ -326,12 +328,12 @@
       h += panel('picks') + '<p class="aviso">' + (reg.reconstruido ? 'Estos picks no quedaron guardados antes del partido: se rehicieron después con lo que se sabía antes de jugarse, así que pueden diferir un poco de los que viste. ' :
         'Pronóstico congelado antes del inicio (' + new Date(reg.inicio).toLocaleString('es', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) + ' en tu hora). ') +
         (reg.calificado ? 'Resultado: ' + nOk + ' aciertos y ' + nMal + ' fallos.' : p.jugado ? 'El partido terminó; los aciertos se marcan cuando se publican las estadísticas de jugadores.' : 'El partido ya empezó: estos picks ya no cambian.') + '</p>' +
-        '<div class="dos"><section class="tarjeta"><h3>Picks del partido</h3><ul class="picks">' + pc.filter(function (x) { return x.tipo !== 'td' && x.prob >= P.MINIMO; }).map(function (x) { return filaPick(x); }).join('') + '</ul></section>' +
+        '<div class="dos"><section class="tarjeta"><h3>Picks del partido</h3><ul class="picks">' + pc.filter(enRango).map(function (x) { return filaPick(x); }).join('') + '</ul></section>' +
         '<section class="tarjeta"><h3>Anotador de touchdown</h3><ul class="picks">' + pc.filter(function (x) { return x.tipo === 'td'; }).map(function (x) { return filaPick(x); }).join('') + '</ul></section></div></div>';
     } else if (p && !p.jugado) {
-      var picks = picksDe(p), fuertes = picks.filter(function (x) { return x.tipo !== 'td' && x.prob >= P.MINIMO; }), tds = picks.filter(function (x) { return x.tipo === 'td'; }).slice(0, 8);
+      var picks = picksDe(p), fuertes = picks.filter(enRango), tds = picks.filter(function (x) { return x.tipo === 'td'; }).slice(0, 8);
       var ayuda = '<p class="tenue">Cuota justa = lo mínimo que debería pagar tu casa para que la apuesta valga la pena según el modelo.</p>';
-      h += panel('picks') + '<div class="dos"><section class="tarjeta"><h3>Picks más probables del partido</h3>' + (fuertes.length ? '<ul class="picks">' + fuertes.map(function (x) { return filaPick(x); }).join('') + '</ul>' : '<p class="tenue">Ningún pick de este partido llega al ' + pct(P.MINIMO, 0) + '.</p>') + ayuda + '</section>' +
+      h += panel('picks') + '<div class="dos"><section class="tarjeta"><h3>Picks más probables del partido</h3>' + (fuertes.length ? '<ul class="picks">' + fuertes.map(function (x) { return filaPick(x); }).join('') + '</ul>' : '<p class="tenue">Ningún pick de este partido queda entre ' + pct(P.MINIMO, 0) + ' y ' + pct(P.MAXIMO, 0) + '.</p>') + ayuda + '</section>' +
         '<section class="tarjeta"><h3>Anotador de touchdown</h3>' + (tds.length ? '<ul class="picks">' + tds.map(function (x) { return filaPick(x); }).join('') + '</ul>' + ayuda : '<p class="tenue">Sin datos de jugadores para este partido.</p>') + '</section></div></div>';
       var qbs = jugadoresDe(p, 'v').concat(jugadoresDe(p, 'l')).filter(function (x) { return x.pr.pase; });
       if (qbs.length) htmlQB = '<div class="dos"><section class="tarjeta ancho"><h3>Quarterbacks</h3><div class="desborde"><table><tr><th>Quarterback</th><th>Yardas de pase</th><th>Más de 0.5 pases de TD</th><th>Más de 1.5</th><th>Más de 2.5</th><th>Anota TD por tierra</th><th>Yardas por tierra</th></tr>' +
@@ -524,7 +526,7 @@
       }
       var reg = congelado(p), pV = reg ? reg.pV : s.pVisita, pL = reg ? reg.pL : s.pLocal, mV = reg ? reg.mV : s.mediaVisita, mL = reg ? reg.mL : s.mediaLocal;
       if (reg) {
-        var pc = picksCongelados(p, reg), m0 = pc[0], ok = pc.filter(function (x) { return x.ok === true; }).length, mal = pc.filter(function (x) { return x.ok === false; }).length;
+        var pc = picksCongelados(p, reg), m0 = pc.filter(enRango)[0] || pc[0], ok = pc.filter(function (x) { return x.ok === true; }).length, mal = pc.filter(function (x) { return x.ok === false; }).length;
         pie = '<span class="mejor' + (m0.ok === true ? ' bien' : m0.ok === false ? ' mal' : '') + '"><span>Mejor pick</span><b>' + esc(m0.tipo === 'td' || m0.tipo === 'qb' ? abreviar(m0.quien) : m0.quien) + ' ' + esc(m0.que) + '</b><i>' + pct(m0.prob, 0) +
           (reg.calificado ? (m0.ok === true ? ' · ✓ acertó' : m0.ok === false ? ' · ✗ falló' : ' · anulado') : ' · congelado') + '</i></span>' +
           (reg.calificado ? '<span class="chip"><b>' + ok + '</b> aciertos · <b>' + mal + '</b> fallos</span>' : '<span class="chip">Aciertos al terminar</span>');
@@ -532,7 +534,7 @@
         var gano = p.ptsLocal > p.ptsVisita ? 'l' : p.ptsLocal < p.ptsVisita ? 'v' : 'e', fav = s.pLocal >= s.pVisita ? 'l' : 'v';
         pie = gano === 'e' ? '<span class="etiqueta">Empate</span>' : gano === fav ? '<span class="etiqueta bien">✓ acertó el favorito</span>' : '<span class="etiqueta mal">✗ ganó el no favorito</span>';
       } else {
-        var ks = picksDe(p), mejor = ks[0], otroTd = ks.filter(function (k) { return k.tipo === 'td'; })[0];
+        var ks = picksDe(p), mejor = ks.filter(enRango)[0] || ks[0], otroTd = ks.filter(function (k) { return k.tipo === 'td'; })[0];
         function corto(k) { return esc(k.tipo === 'td' || k.tipo === 'qb' ? abreviar(k.quien) : k.quien) + ' ' + esc(k.que); }
         pie = '<span class="mejor"><span>Mejor pick</span><b>' + corto(mejor) + '</b><i>' + pct(mejor.prob, 0) + ' · cuota justa ' + cuota(mejor.prob) + '</i></span>' +
           (otroTd && otroTd !== mejor ? '<span class="chip"><b>' + pct(otroTd.prob, 0) + '</b> ' + corto(otroTd) + '</span>' : '');
@@ -557,12 +559,12 @@
   function vistaPicks() {
     var lista = partidosDeJornada().filter(function (p) { return !p.jugado && !enJuego(p); }), todos = [];
     lista.forEach(function (p) { todos = todos.concat(picksDe(p)); });
-    var filtros = [['todos', 'Todos'], ['partido', 'Ganador y hándicap'], ['total', 'Puntos'], ['anot', 'Touchdowns y goles de campo'], ['td', 'Anotadores'], ['qb', 'Quarterbacks']];
-    var ver = todos.filter(function (k) { return E.filtro === 'td' ? k.tipo === 'td' : k.prob >= P.MINIMO && (E.filtro === 'todos' || k.tipo === E.filtro); }).sort(function (a, b) { return b.prob - a.prob; }).slice(0, 50);
+    var filtros = [['todos', 'Todos'], ['partido', 'Ganador y hándicap'], ['total', 'Puntos'], ['anot', 'Touchdowns y goles de campo'], ['jug', 'Jugadores'], ['td', 'Anotadores']];
+    var ver = todos.filter(function (k) { return E.filtro === 'td' ? k.tipo === 'td' : enRango(k) && (E.filtro === 'todos' || k.tipo === E.filtro); }).sort(function (a, b) { return b.prob - a.prob; }).slice(0, 50);
     vista.innerHTML = '<div class="fila">' + selectorJornada() + '<div class="segmento" role="group" aria-label="Tipo de pick">' + filtros.map(function (f) {
       return '<button data-f="' + f[0] + '" aria-pressed="' + (E.filtro === f[0]) + '">' + f[1] + '</button>'; }).join('') + '</div></div>' +
       (ver.length ? '<section class="tarjeta"><h2>Los picks más probables de la jornada</h2>' +
-        '<p class="tenue">Ordenados de más a menos probable; no se muestra ninguno por debajo del ' + pct(P.MINIMO, 0) + '. En hándicap, puntos y touchdowns se busca además la línea alternativa más exigente que aún se cumple el ' + pct(P.SEGURO, 0) + ' de las veces. Probabilidad alta suele ir con cuota baja. A la derecha, la cuota justa: lo mínimo que debería pagar tu casa. Toca un pick para abrir su partido.</p>' +
+        '<p class="tenue">Ordenados de más a menos probable, entre ' + pct(P.MINIMO, 0) + ' y ' + pct(P.MAXIMO, 0) + ' (cuota justa de 1.25 en adelante). En hándicap, puntos y touchdowns se busca la línea alternativa más exigente que aún se cumple el ' + pct(P.SEGURO, 0) + ' de las veces. En yardas de jugadores, el hito más exigente al ' + pct(P.SEGURO, 0) + ' que además el jugador ya logró en la mayoría de sus últimos partidos. A la derecha, la cuota justa: lo mínimo que debería pagar tu casa. Toca un pick para abrir su partido.</p>' +
         '<ul class="picks grande">' + ver.map(function (k, i) { return filaPick(k, true, i); }).join('') + '</ul></section>' :
         '<p class="aviso">' + (lista.length ? 'No hay picks de este tipo para la jornada.' : 'No quedan partidos por empezar en esta jornada. Mira sus resultados en la pestaña Aciertos.') + '</p>') +
       '<p class="aviso">Probabilidad alta no es lo mismo que apuesta buena: las casas ya pagan poco por lo probable. El hándicap y el total son los de cierre del mercado y pueden diferir medio punto de los de tu casa; dentro de cada partido puedes cambiar la línea.</p>';
@@ -576,14 +578,14 @@
 
   // ---------- vista: aciertos ----------
   function vistaAciertos() {
-    var nombres = { partido: 'Ganador y hándicap', total: 'Puntos del partido y de equipo', anot: 'Touchdowns y goles de campo del partido', td: 'Anotador de touchdown', qb: 'Pases de touchdown del quarterback' };
+    var nombres = { partido: 'Ganador y hándicap', total: 'Puntos del partido y de equipo', anot: 'Touchdowns y goles de campo del partido', jug: 'Yardas y pases de TD de jugadores', td: 'Anotador de touchdown', qb: 'Pases de touchdown del quarterback' };
     var porTipo = {}, mejores = { n: 0, ok: 0, p: 0 }, todo = { n: 0, ok: 0, p: 0 }, guardados = { n: 0, ok: 0, p: 0 }, rehechos = { n: 0, ok: 0, p: 0 }, seguros = { n: 0, ok: 0, p: 0 }, semanas = {}, pendientes = 0;
     function sumar(o, k) { o.n++; o.p += k.p; if (k.ok) o.ok++; }
     Object.keys(E.hist).forEach(function (id) {
       var r = E.hist[id];
       if (!r.calificado) { if (Date.now() >= Date.parse(r.inicio) - P.MARGEN_CONGELAR) pendientes++; return; }
       var validos = r.picks.filter(function (k) { return k.ok === true || k.ok === false; });
-      validos.forEach(function (k) { sumar(porTipo[k.t] = porTipo[k.t] || { n: 0, ok: 0, p: 0 }, k); sumar(todo, k); sumar(r.reconstruido ? rehechos : guardados, k); if (k.p >= P.SEGURO) sumar(seguros, k); });
+      validos.forEach(function (k) { sumar(porTipo[k.t] = porTipo[k.t] || { n: 0, ok: 0, p: 0 }, k); sumar(todo, k); sumar(r.reconstruido ? rehechos : guardados, k); if (k.p >= P.SEGURO && k.p <= P.MAXIMO) sumar(seguros, k); });
       if (validos.length) sumar(mejores, validos[0]);
       (semanas[r.temporada + ' · semana ' + r.semana] = semanas[r.temporada + ' · semana ' + r.semana] || []).push(r);
     });
@@ -594,7 +596,7 @@
         '. Los aciertos aparecen cuando se publican el marcador y las estadísticas de jugadores, normalmente al día siguiente.</p>';
       return;
     }
-    h += '<div class="cifras">' + cifra('Picks de 70% o más', seguros) + cifra('Mejor pick de cada partido', mejores) + cifra('Todos los picks', todo) + cifra('Guardados antes del partido', guardados) + cifra('Rehechos después del partido', rehechos) + '</div>' +
+    h += '<div class="cifras">' + cifra('Picks de 70% a 80%', seguros) + cifra('Mejor pick de cada partido', mejores) + cifra('Todos los picks', todo) + cifra('Guardados antes del partido', guardados) + cifra('Rehechos después del partido', rehechos) + '</div>' +
       (rehechos.n ? '<p class="tenue">Los rehechos son partidos que se jugaron antes de que existiera el registro (o sin que se guardaran a tiempo). Se calcularon con lo que se sabía antes de cada partido, pero la medida más limpia es la de los guardados.</p>' : '') +
       '<section class="tarjeta"><h3>Por tipo de pick</h3><div class="desborde"><table><tr><th>Tipo</th><th>Picks</th><th>Acertados</th><th>Acierto real</th><th>Lo que esperaba el modelo</th></tr>' +
       Object.keys(nombres).filter(function (t) { return porTipo[t]; }).map(function (t) { var o = porTipo[t];
@@ -714,7 +716,8 @@
       '<li><b>Simulación.</b> Cada partido se juega miles de veces, serie ofensiva por serie: touchdown, gol de campo o nada; punto extra o conversión de 2; decisiones de final de partido y prórroga.</li>' +
       '<li><b>Jugadores.</b> La proyección parte de sus últimos 10 partidos (los recientes pesan más), se acerca un poco al promedio para no fiarse de rachas y se ajusta por lo que concede la defensa rival.</li>' +
       '<li><b>Touchdowns y goles de campo.</b> Se cuentan en cada simulación. Comparado con 855 partidos reales: 5.02 touchdowns por partido simulados contra 5.03 reales, y 3.44 goles de campo contra 3.40.</li>' +
-      '<li><b>Picks.</b> La cuota justa es 1 ÷ probabilidad, sin margen de la casa.</li></ul></section>' +
+      '<li><b>Picks de yardas.</b> Se propone el hito más exigente que el modelo da al 70% o más, y solo si el jugador ya lo logró en al menos el 70% de sus últimos partidos. Con esa regla, de 2023 a 2026 acertaron 78% en yardas de pase (976 casos), 75% por tierra (878) y 75% en recepción (1 532).</li>' +
+      '<li><b>Picks.</b> Solo se muestran entre 58% y 80%. La cuota justa es 1 ÷ probabilidad, sin margen de la casa.</li></ul></section>' +
       '<section class="tarjeta"><h3>Lo que el modelo no sabe</h3><ul class="lista">' +
       '<li>Noticias: no lee prensa ni redes. Para eso están «Tu información» en cada partido y la línea del mercado.</li>' +
       '<li>La calidad de cada lesionado: cuenta jugadores por posición, sin distinguir a una estrella de un suplente.</li>' +
