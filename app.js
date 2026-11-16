@@ -150,10 +150,11 @@
   function enJuego(p) { var ini = P.inicio(p); return !p.jugado && ini != null && Date.now() >= ini; }
   function picksCongelados(p, reg) {
     var juego = p.visita + ' en ' + p.local;
-    return reg.picks.map(function (k) { return { tipo: k.t, eq: k.eq, quien: k.q, que: k.que, prob: k.p, ok: k.ok, resp: k.r, calificado: !!reg.calificado, juego: juego, p: p }; });
+    return reg.picks.filter(function (k) { return !retirado(k.m); }).map(function (k) { return { tipo: k.t, eq: k.eq, quien: k.q, que: k.que, prob: k.p, ok: k.ok, resp: k.r, m: k.m, calificado: !!reg.calificado, juego: juego, p: p }; });
   }
   // Un pick se muestra si no es de anotador y su probabilidad está entre el mínimo y el máximo (cuota justa de 1.25 a 1.72).
-  function enRango(k) { return k.tipo !== 'td' && k.prob >= P.MINIMO && k.prob <= P.MAXIMO; }
+  function retirado(m) { return !!m && m.m === 'tdPase' && m.mas === false; } // «menos pases de touchdown»: mercado retirado, tampoco se enseña en partidos ya guardados
+  function enRango(k) { return k.tipo !== 'td' && k.prob >= P.MINIMO && k.prob <= P.MAXIMO && !retirado(k.m); }
   function marca(k) {
     if (!k.calificado) return '';
     return k.ok === true ? ' <span class="etiqueta bien">✓ acertó</span>' : k.ok === false ? ' <span class="etiqueta mal">✗ falló</span>' : ' <span class="etiqueta">anulado</span>';
@@ -584,7 +585,7 @@
     Object.keys(E.hist).forEach(function (id) {
       var r = E.hist[id];
       if (!r.calificado) { if (Date.now() >= Date.parse(r.inicio) - P.MARGEN_CONGELAR) pendientes++; return; }
-      var validos = r.picks.filter(function (k) { return k.ok === true || k.ok === false; });
+      var validos = r.picks.filter(function (k) { return (k.ok === true || k.ok === false) && !retirado(k.m); });
       validos.forEach(function (k) { sumar(porTipo[k.t] = porTipo[k.t] || { n: 0, ok: 0, p: 0 }, k); sumar(todo, k); sumar(r.reconstruido ? rehechos : guardados, k); if (k.p >= P.SEGURO && k.p <= P.MAXIMO) sumar(seguros, k); });
       if (validos.length) sumar(mejores, validos[0]);
       (semanas[r.temporada + ' · semana ' + r.semana] = semanas[r.temporada + ' · semana ' + r.semana] || []).push(r);
@@ -604,7 +605,7 @@
     Object.keys(semanas).sort(function (x, y) { var a = semanas[x][0], b = semanas[y][0]; return b.temporada - a.temporada || b.semana - a.semana; }).forEach(function (s) {
       h += '<section class="tarjeta" style="margin-top:14px"><h3>' + s + '</h3><div class="desborde"><table><tr><th>Partido</th><th>Final</th><th class="izq">Mejor pick</th><th>Probabilidad</th><th>Resultado</th><th>Aciertos del partido</th></tr>' +
         semanas[s].map(function (r) {
-          var k = r.picks[0], ok = r.picks.filter(function (x) { return x.ok === true; }).length, n = r.picks.filter(function (x) { return x.ok === true || x.ok === false; }).length;
+          var vis = r.picks.filter(function (x) { return !retirado(x.m); }), k = vis.filter(function (x) { return x.t !== 'td' && x.p >= P.MINIMO && x.p <= P.MAXIMO; })[0] || vis[0], ok = vis.filter(function (x) { return x.ok === true; }).length, n = vis.filter(function (x) { return x.ok === true || x.ok === false; }).length;
           return '<tr><td>' + escudo(r.visita) + ' en ' + escudo(r.local) + '</td><td>' + (r.final ? r.final[0] + '–' + r.final[1] : '—') + '</td><td class="izq">' + esc(k.q) + ' ' + esc(k.que) + (r.reconstruido ? ' <span class="etiqueta">rehecho</span>' : '') + '</td><td>' + pct(k.p, 0) + '</td><td>' +
             (k.ok === true ? '<span class="etiqueta bien">✓ acertó</span>' : k.ok === false ? '<span class="etiqueta mal">✗ falló</span>' : '<span class="etiqueta">anulado</span>') + '</td><td>' + ok + ' de ' + n + '</td></tr>';
         }).join('') + '</table></div></section>';
