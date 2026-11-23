@@ -1,15 +1,22 @@
 # Simulador NFL
 
-Sitio estático que estima los resultados de los partidos de la NFL con datos reales y miles de simulaciones.
-Publicado con GitHub Pages en https://angel14-lab.github.io/simulador-nfl/
+Sitio estático con los picks más probables de cada partido de la NFL: https://angel14-lab.github.io/simulador-nfl/
 
-- **Jornada**: probabilidad de victoria, marcador medio, hándicap estimado, línea real del mercado y los tres picks más probables de cada partido.
-- **Mejores picks**: los picks más probables de toda la jornada (ganador, hándicap, total, yardas, recepciones y touchdowns de jugadores) con su cuota justa.
-- **Detalle del partido**: picks, anotadores probables, hándicaps y totales a cualquier línea, proyección de cada jugador con calculadora de líneas, comparación de equipos y parte de lesiones.
-- **Aciertos**: cada pronóstico se congela 10 minutos antes del inicio (con la última actualización previa) y al terminar se marca como acertado, fallado o anulado.
-- **Cruce libre**: cualquier equipo contra cualquier otro, en casa o en campo neutral.
-- **Equipos**: calificaciones de ataque, defensa y quarterback, marca contra el hándicap y contra el total.
-- **Precisión y método**: comparación con los resultados reales y con el mercado desde 2016, y calibración de las proyecciones de jugadores.
+- **Partidos**: la jornada por días, con probabilidad de victoria, línea del mercado y el mejor pick de cada partido.
+  Al abrir un partido se ven sus 10 picks más probables y, plegado, el análisis (diferencia de puntos, total, equipos, bajas).
+- **Mejores picks**: los más probables de toda la jornada.
+- **Aciertos**: cada pick se guarda antes del partido y se califica al terminar.
+- **Equipos** y **Método**: calificaciones del modelo y la validación de los picks.
+
+## Cómo se calculan
+
+1. Puntos esperados de cada equipo: 85% línea del mercado y 15% modelo propio (equipos, quarterbacks, eficiencia y lesiones).
+2. 100 000 simulaciones por partido, serie ofensiva por serie.
+3. Picks en mercados validados (ganador, hándicap y total alternativos, touchdowns del partido y de cada equipo, yardas
+   de jugadores y pases de touchdown), solo entre 65% y 80% de probabilidad. Se muestran los 10 mejores por partido.
+
+`node herramientas/validar-picks.js` repite la prueba con los partidos de 2016 a 2025 (74.5% de acierto en 20 823 picks)
+y guarda el resumen en `datos/validacion-picks.json`.
 
 ## Datos
 

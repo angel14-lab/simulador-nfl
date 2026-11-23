@@ -15,7 +15,9 @@
   };
   var POISSON = { td: 1, tdPase: 1 };
   var MARGEN_CONGELAR = 10 * 60 * 1000; // los picks dejan de moverse 10 minutos antes del inicio
-  var MINIMO = 0.58;  // por debajo de esto un pick es casi una moneda al aire y no se muestra como pick
+  var MINIMO = 0.65;  // por debajo, la validación muestra picks que aciertan menos de lo que anuncian
+  var CUANTOS = 10;   // picks que se muestran por partido
+  var MEZCLA = 0.85;  // peso de la línea del mercado al calcular los puntos esperados (validar-picks.js)
   var SEGURO = 0.70;  // probabilidad que se busca al elegir una línea alternativa
   var MAXIMO = 0.80;  // por encima de esto la cuota justa baja de 1.25 y el pick deja de interesar
   var RECIENTE = 0.70; // un hito de yardas solo se propone si el jugador lo logró en esta parte de sus últimos partidos
@@ -120,8 +122,17 @@
     return c / sim.n;
   }
 
-  /* Picks en los mercados habituales de una casa de apuestas, de más a menos probable.
-     Cada uno lleva «m», la descripción exacta del mercado, para poder calificarlo al terminar el partido. */
+  /* Los picks de un partido: solo mercados que la validación (herramientas/validar-picks.js, 2016-2025)
+     respalda cuando su probabilidad está entre 65% y 80%:
+       · ganador del partido,
+       · hándicap y total de puntos con línea alternativa,
+       · touchdowns del partido y de cada equipo,
+       · yardas de jugadores (sobre la línea real de una casa, o un hito que el jugador ya viene logrando),
+       · más de 0.5 pases de touchdown del quarterback, si ya lo viene logrando.
+     Se descartaron por no acertar lo que anunciaban: hándicap, total y puntos de equipo en la línea
+     principal del mercado (46-52%), goles de campo (55-69%, inestable), anotador de touchdown y
+     «menos de 1.5 pases de touchdown». Cada pick lleva «m», la descripción exacta del mercado, para
+     poder calificarlo al terminar. */
   function picksDe(ctx, p, sim, esp, reconstruir) {
     var lista = [];
     function poner(tipo, eq, quien, que, prob, m, extra) {
@@ -129,96 +140,116 @@
       if (extra) Object.keys(extra).forEach(function (x) { k[x] = extra[x]; });
       lista.push(k);
     }
+    // Ganador.
     var ef = sim.pLocal >= sim.pVisita ? p.local : p.visita;
     poner('partido', ef, NOMBRES[ef] || ef, 'gana el partido', Math.max(sim.pLocal, sim.pVisita), { m: 'gana', eq: ef });
-    if (p.linea != null) {
-      var c = M.cubrir(sim, -p.linea), lc = c.local >= c.visita, eh = lc ? p.local : p.visita, h = lc ? -p.linea : p.linea;
-      poner('partido', eh, textoHandicap(eh, h), 'hándicap', Math.max(c.local, c.visita) / (1 - c.nulo || 1), { m: 'handicap', eq: eh, linea: h });
+
+    // Hándicap alternativo: para cada equipo, la línea más exigente que aún se cumple el 70% de las veces.
+    var i, r, mejorL = null, mejorV = null, masT = null, menosT = null, hl, lt;
+    var centroH = p.linea != null ? -p.linea : -Math.round(esp.local - esp.visita);
+    for (i = -12; i <= 12; i++) {
+      hl = Math.floor(centroH) + 0.5 + i; r = M.cubrir(sim, hl);
+      if (r.local >= SEGURO && !mejorL) mejorL = { h: hl, q: r.local };
+      if (r.visita >= SEGURO) mejorV = { h: -hl, q: r.visita };
     }
-    if (p.lineaTotal != null) {
-      var t = M.totales(sim, p.lineaTotal), mas = t.mas >= t.menos;
-      poner('total', null, (mas ? 'Más de ' : 'Menos de ') + p.lineaTotal, 'puntos en el partido', Math.max(t.mas, t.menos) / (1 - t.nulo || 1), { m: 'total', mas: mas, linea: p.lineaTotal });
+    [[p.local, mejorL], [p.visita, mejorV]].forEach(function (x) {
+      if (x[1] && Math.abs(x[1].h) !== 0.5) // ±0.5 es lo mismo que «gana el partido»
+        poner('partido', x[0], textoHandicap(x[0], x[1].h), 'hándicap', x[1].q, { m: 'handicap', eq: x[0], linea: x[1].h });
+    });
+    // Total de puntos alternativo, por arriba y por abajo.
+    var centroT = p.lineaTotal != null ? p.lineaTotal : esp.local + esp.visita;
+    for (i = -12; i <= 12; i++) {
+      lt = Math.floor(centroT) + 0.5 + i; r = M.totales(sim, lt);
+      if (r.mas >= SEGURO) masT = { l: lt, q: r.mas };
+      if (r.menos >= SEGURO && !menosT) menosT = { l: lt, q: r.menos };
     }
-    var lt = lineaPrincipal(sim, CUENTAS.tds(sim), [3.5, 4.5, 5.5, 6.5, 7.5]), lg = lineaPrincipal(sim, CUENTAS.fg(sim), [2.5, 3.5, 4.5]);
-    poner('anot', null, (lt.q >= 0.5 ? 'Más de ' : 'Menos de ') + lt.l, 'touchdowns en el partido', Math.max(lt.q, 1 - lt.q), { m: 'tds', mas: lt.q >= 0.5, linea: lt.l });
-    poner('anot', null, (lg.q >= 0.5 ? 'Más de ' : 'Menos de ') + lg.l, 'goles de campo en el partido', Math.max(lg.q, 1 - lg.q), { m: 'fg', mas: lg.q >= 0.5, linea: lg.l });
+    if (masT) poner('total', null, 'Más de ' + masT.l, 'puntos en el partido', masT.q, { m: 'total', mas: true, linea: masT.l });
+    if (menosT) poner('total', null, 'Menos de ' + menosT.l, 'puntos en el partido', menosT.q, { m: 'total', mas: false, linea: menosT.l });
+
+    // Touchdowns del partido y de cada equipo, con la misma regla del 70%.
+    function escalera(cuenta, lineas, hacer) {
+      var mas = null, menos = null;
+      lineas.forEach(function (l) { var q = masQue(sim, cuenta, l); if (q >= SEGURO) mas = { l: l, q: q }; if (1 - q >= SEGURO && !menos) menos = { l: l, q: 1 - q }; });
+      if (mas) hacer(true, mas);
+      if (menos) hacer(false, menos);
+    }
+    escalera(CUENTAS.tds(sim), [2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5], function (mas, x) {
+      // Los «menos touchdowns» del partido aciertan unos 2.5 puntos menos de lo que dice la simulación: se moderan.
+      poner('anot', null, (mas ? 'Más de ' : 'Menos de ') + x.l, 'touchdowns en el partido', mas ? x.q : moderar(x.q), { m: 'tds', mas: mas, linea: x.l });
+    });
+    [['l', p.local], ['v', p.visita]].forEach(function (x) {
+      escalera(x[0] === 'l' ? CUENTAS.tdsLocal(sim) : CUENTAS.tdsVisita(sim), [1.5, 2.5, 3.5], function (mas, y) {
+        poner('anot', x[1], x[1] + (mas ? ' más de ' : ' menos de ') + y.l, 'touchdowns del equipo', y.q, { m: 'tdsEquipo', eq: x[1], mas: mas, linea: y.l });
+      });
+    });
+
+    // Jugadores.
+    var hayReales = !!(ctx.lineas && ctx.lineas[p.id] && ctx.lineas[p.id].jug && Object.keys(ctx.lineas[p.id].jug).length);
+    var casa = hayReales ? ctx.lineas[p.id].casaJugadores || 'la casa' : '';
     [['v', p.visita], ['l', p.local]].forEach(function (x) {
-      var le = lineaPrincipal(sim, x[0] === 'l' ? CUENTAS.tdsLocal(sim) : CUENTAS.tdsVisita(sim), [1.5, 2.5, 3.5]);
-      poner('anot', x[1], x[1] + (le.q >= 0.5 ? ' más de ' : ' menos de ') + le.l, 'touchdowns del equipo', Math.max(le.q, 1 - le.q), { m: 'tdsEquipo', eq: x[1], mas: le.q >= 0.5, linea: le.l });
-      var l = lineaEquipo(p, x[0], esp), q = masDe(sim, x[0], l);
-      poner('total', x[1], x[1] + (q >= 0.5 ? ' más de ' : ' menos de ') + l, 'puntos del equipo', Math.max(q, 1 - q), { m: 'equipo', eq: x[1], mas: q >= 0.5, linea: l });
       jugadoresDe(ctx, p, x[0], reconstruir).forEach(function (j) {
-        var rtd = ctx.lineas && ctx.lineas[p.id] && ctx.lineas[p.id].jug ? ctx.lineas[p.id].jug[normalizar(j.j.n)] : null;
-        if (j.pr.td != null) poner('td', j.eq, j.j.n, 'anota touchdown', probJugador(j.pr, 'td', 1), { m: 'td', id: j.j.id }, { duda: j.duda, dos: probJugador(j.pr, 'td', 2), cuotaReal: rtd && rtd.td ? rtd.td.si : null });
-        /* Yardas: el hito más exigente que el modelo da al 70% o más, y solo si el jugador ya lo viene
-           logrando en la mayoría de sus últimos partidos. En la validación (2023-2026) estos picks
-           acertaron 78% en pase, 75% por tierra y 75% en recepción. */
-        var hayReales = !!(ctx.lineas && ctx.lineas[p.id] && ctx.lineas[p.id].jug && Object.keys(ctx.lineas[p.id].jug).length);
-        var reales = hayReales ? ctx.lineas[p.id].jug[normalizar(j.j.n)] : null, casa = reales ? ctx.lineas[p.id].casaJugadores || 'la casa' : '';
+        var reales = hayReales ? ctx.lineas[p.id].jug[normalizar(j.j.n)] : null;
         Object.keys(HITOS).forEach(function (k) {
           if (!j.pr[k]) return;
           var hito = null, logrados;
           if (reales && reales[k]) {
-            // Hay línea real de una casa: el pick se hace sobre ella y no sobre un hito propio.
+            // Línea real de una casa: el pick se hace sobre ella, promediando el modelo con lo que dicen sus cuotas.
             var real = reales[k], mas = probConCasa(j.pr, k, real).mas, arriba = mas >= 0.5;
             logrados = j.previos.filter(function (g) { return arriba ? g[HITOS[k].col] > real.l : g[HITOS[k].col] < real.l; }).length;
             poner('jug', j.eq, j.j.n, (arriba ? 'más de ' : 'menos de ') + real.l + ' ' + HITOS[k].nombre, Math.max(mas, 1 - mas), { m: 'yardas', id: j.j.id, est: k, linea: real.l, mas: arriba },
-              { duda: j.duda, cuotaReal: arriba ? real.mas : real.menos, resp: 'línea de ' + casa + ' · lo logró en ' + logrados + ' de sus últimos ' + j.previos.length });
+              { duda: j.duda, cuotaReal: arriba ? real.mas : real.menos, resp: 'línea de ' + casa + ' · lo logró en ' + logrados + ' de ' + j.previos.length });
             return;
           }
           if (hayReales) return; // la casa ya publicó líneas de este partido y no ofrece esta: no se inventa un hito
+          // Hito más exigente al 70% que además el jugador logró en al menos el 70% de sus últimos partidos
+          // (validado 2023-2026: 78% pase, 75% tierra, 75% recepción).
           HITOS[k].escala.forEach(function (u) { var q = M.probAlMenos(j.pr[k].m, j.pr[k].sd, u); if (q >= SEGURO) hito = { u: u, q: q }; });
           if (!hito) return;
           logrados = j.previos.filter(function (g) { return g[HITOS[k].col] >= hito.u; }).length;
           if (logrados / j.previos.length < RECIENTE) return;
           poner('jug', j.eq, j.j.n, hito.u + '+ ' + HITOS[k].nombre, hito.q, { m: 'yardas', id: j.j.id, est: k, linea: hito.u },
-            { duda: j.duda, resp: 'lo logró en ' + logrados + ' de sus últimos ' + j.previos.length });
+            { duda: j.duda, resp: 'lo logró en ' + logrados + ' de ' + j.previos.length });
         });
-      });
-    });
-    /* Picks «seguros»: en los mercados con líneas alternativas se busca la línea más exigente que
-       todavía se cumple al menos el 70% de las veces. */
-    var i, r, mejorL = null, mejorV = null, masT = null, menosT = null, centroH = p.linea != null ? -p.linea : -Math.round(esp.local - esp.visita), hl, lt2;
-    for (i = -10; i <= 10; i++) {
-      hl = Math.floor(centroH) + 0.5 + i; r = M.cubrir(sim, hl);
-      if (r.local >= SEGURO && !mejorL) mejorL = { h: hl, q: r.local };            // el primero es el más exigente para el local
-      if (r.visita >= SEGURO) mejorV = { h: -hl, q: r.visita };                     // el último es el más exigente para la visita
-    }
-    function alterno(eq, x) {
-      if (x && Math.abs(x.h) !== 0.5 && !(p.linea != null && lista.some(function (k) { return k.m.m === 'handicap' && k.m.eq === eq && k.m.linea === x.h; })))
-        poner('partido', eq, textoHandicap(eq, x.h), 'hándicap alternativo', x.q, { m: 'handicap', eq: eq, linea: x.h });
-    }
-    alterno(p.local, mejorL); alterno(p.visita, mejorV);
-    var centroT = p.lineaTotal != null ? p.lineaTotal : esp.local + esp.visita;
-    for (i = -10; i <= 10; i++) {
-      lt2 = Math.floor(centroT) + 0.5 + i; r = M.totales(sim, lt2);
-      if (r.mas >= SEGURO) masT = { l: lt2, q: r.mas };
-      if (r.menos >= SEGURO && !menosT) menosT = { l: lt2, q: r.menos };
-    }
-    if (masT && masT.l !== p.lineaTotal) poner('total', null, 'Más de ' + masT.l, 'puntos en el partido (línea alternativa)', masT.q, { m: 'total', mas: true, linea: masT.l });
-    if (menosT && menosT.l !== p.lineaTotal) poner('total', null, 'Menos de ' + menosT.l, 'puntos en el partido (línea alternativa)', menosT.q, { m: 'total', mas: false, linea: menosT.l });
-    function escalera(cuenta, lineas, hacer) {
-      var mas = null, menos = null;
-      lineas.forEach(function (l) { var q = masQue(sim, cuenta, l); if (q >= SEGURO) mas = { l: l, q: q }; if (1 - q >= SEGURO && !menos) menos = { l: l, q: 1 - q }; });
-      if (mas) hacer(true, mas); if (menos) hacer(false, menos);
-    }
-    function yaEsta(m) { return lista.some(function (k) { return k.m.m === m.m && k.m.eq === m.eq && k.m.linea === m.linea && k.m.mas === m.mas; }); }
-    escalera(CUENTAS.tds(sim), [2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5], function (mas, x) {
-      var m = { m: 'tds', mas: mas, linea: x.l };
-      if (!yaEsta(m)) poner('anot', null, (mas ? 'Más de ' : 'Menos de ') + x.l, 'touchdowns en el partido', x.q, m);
-    });
-    [['l', p.local], ['v', p.visita]].forEach(function (x) {
-      escalera(x[0] === 'l' ? CUENTAS.tdsLocal(sim) : CUENTAS.tdsVisita(sim), [1.5, 2.5, 3.5], function (mas, y) {
-        var m = { m: 'tdsEquipo', eq: x[1], mas: mas, linea: y.l };
-        if (!yaEsta(m)) poner('anot', x[1], x[1] + (mas ? ' más de ' : ' menos de ') + y.l, 'touchdowns del equipo', y.q, m);
-      });
-      jugadoresDe(ctx, p, x[0], reconstruir).forEach(function (j) {
-        var uno = j.pr.tdPase != null ? probJugador(j.pr, 'tdPase', 1) : 0, conTd = j.previos.filter(function (g) { return g[5] >= 1; }).length;
-        if (uno >= SEGURO && conTd / j.previos.length >= RECIENTE) poner('jug', j.eq, j.j.n, 'más de 0.5 pases de touchdown', uno, { m: 'tdPase', id: j.j.id, mas: true, linea: 0.5 },
-          { duda: j.duda, resp: 'lo logró en ' + conTd + ' de sus últimos ' + j.previos.length });
+        // Más de 0.5 pases de touchdown: aciertan unos 2.5 puntos menos de lo que dice el modelo, se moderan.
+        var uno = j.pr.tdPase != null ? moderar(probJugador(j.pr, 'tdPase', 1)) : 0, conTd = j.previos.filter(function (g) { return g[5] >= 1; }).length;
+        if (uno >= MINIMO && conTd / j.previos.length >= RECIENTE) poner('jug', j.eq, j.j.n, 'más de 0.5 pases de touchdown', uno, { m: 'tdPase', id: j.j.id, mas: true, linea: 0.5 },
+          { duda: j.duda, resp: 'lo logró en ' + conTd + ' de ' + j.previos.length });
       });
     });
     return lista.sort(function (a, b) { return b.prob - a.prob; });
+  }
+  // Acerca una probabilidad al 50% un 10%: 76% pasa a 73%.
+  function moderar(q) { return 0.5 + (q - 0.5) * 0.9; }
+
+  /* ¿Es un pick de los que se muestran? Sirve también para pronósticos guardados con reglas anteriores
+     (que incluían mercados hoy descartados). Acepta picks de la página {tipo, que, prob, m}. */
+  function apto(k) {
+    var m = k.m || {};
+    if (k.tipo === 'td' || m.m === 'td' || m.m === 'fg' || m.m === 'equipo') return false;
+    if (m.m === 'tdPase' && m.mas === false) return false;
+    if (k.principal) return false; // hándicap o total en la línea principal del mercado (pronósticos antiguos)
+    return k.prob >= MINIMO && k.prob <= MAXIMO;
+  }
+  // Los mejores picks de un partido: aptos, del más al menos probable, como máximo «n».
+  function mejores(lista, n) {
+    return lista.filter(apto).sort(function (a, b) { return b.prob - a.prob; }).slice(0, n || CUANTOS);
+  }
+
+  /* Línea del mercado de un partido: la de una casa bajada con The Odds API si la hay (más reciente),
+     si no la de nflverse. Devuelve una copia del partido con esas líneas. */
+  function conLineas(p, reales) {
+    var r = reales && reales[p.id], q = Object.assign({}, p);
+    if (r && r.h != null) q.linea = -r.h;      // la casa da el hándicap del local (negativo = favorito)
+    if (r && r.t != null) q.lineaTotal = r.t;
+    return q;
+  }
+
+  /* Puntos esperados de cada equipo mezclando el modelo con la línea del mercado (hándicap a favor
+     del local y total). peso = parte que se le da al mercado; ver herramientas/validar-picks.js. */
+  function mezclar(pred, linea, total, peso) {
+    if (linea == null || total == null) return { local: Math.max(3, pred.local), visita: Math.max(3, pred.visita) };
+    var l = (1 - peso) * pred.local + peso * (total + linea) / 2, v = (1 - peso) * pred.visita + peso * (total - linea) / 2;
+    return { local: Math.max(3, l), visita: Math.max(3, v) };
   }
 
   // Hora de inicio en milisegundos. La hora de los datos está en horario del Este de EE. UU.
@@ -233,25 +264,27 @@
     return comoUTC + (comoUTC - enNY);
   }
 
-  /* ¿Se cumplió el pick? true, false, o null si se anula (empate con la línea, o el jugador no jugó).
-     estad(id) devuelve {td, tdPase} del jugador en ese partido, o null si no jugó. */
+  /* ¿Se cumplió el pick? true, false, null si se anula (empate con la línea, o el jugador no jugó),
+     o undefined si todavía faltan datos para saberlo. estad(id) devuelve las estadísticas del jugador
+     en ese partido, null si no jugó, o undefined si aún no están publicadas. */
   function calificar(m, p, estad) {
     var d = p.ptsLocal - p.ptsVisita, x, e;
     if (m.m === 'gana') return d === 0 ? null : (d > 0 ? p.local : p.visita) === m.eq;
     if (m.m === 'handicap') { x = (m.eq === p.local ? d : -d) + m.linea; return x === 0 ? null : x > 0; }
     if (m.m === 'total') { x = p.ptsLocal + p.ptsVisita - m.linea; return x === 0 ? null : (x > 0) === m.mas; }
     if (m.m === 'equipo') { x = (m.eq === p.local ? p.ptsLocal : p.ptsVisita) - m.linea; return x === 0 ? null : (x > 0) === m.mas; }
-    if (m.m === 'tds') return p.tdLocal == null || p.tdVisita == null ? null : (p.tdLocal + p.tdVisita > m.linea) === m.mas;
-    if (m.m === 'tdsEquipo') { x = m.eq === p.local ? p.tdLocal : p.tdVisita; return x == null ? null : (x > m.linea) === m.mas; }
-    if (m.m === 'fg') return p.golesCampo == null ? null : (p.golesCampo > m.linea) === m.mas;
+    if (m.m === 'tds') return p.tdLocal == null || p.tdVisita == null ? undefined : (p.tdLocal + p.tdVisita > m.linea) === m.mas;
+    if (m.m === 'tdsEquipo') { x = m.eq === p.local ? p.tdLocal : p.tdVisita; return x == null ? undefined : (x > m.linea) === m.mas; }
+    if (m.m === 'fg') return p.golesCampo == null ? undefined : (p.golesCampo > m.linea) === m.mas;
     e = estad(m.id);
-    if (!e) return null;
+    if (e === undefined) return undefined; // estadísticas de jugadores todavía sin publicar
+    if (!e) return null;                   // publicadas, pero el jugador no jugó: se anula
     if (m.m === 'td') return e.td >= 1;
     if (m.m === 'yardas') return m.mas === false ? e[m.est] < m.linea : e[m.est] >= m.linea;
     if (m.m === 'tdPase') return (e.tdPase > m.linea) === m.mas;
     return null;
   }
 
-  return { NOMBRES: NOMBRES, MARGEN_CONGELAR: MARGEN_CONGELAR, MINIMO: MINIMO, SEGURO: SEGURO, MAXIMO: MAXIMO, normalizar: normalizar, indexar: indexar, parte: parte, jugadoresDe: jugadoresDe, probJugador: probJugador,
-    lineaEquipo: lineaEquipo, masDe: masDe, masQue: masQue, CUENTAS: CUENTAS, lineaJusta: lineaJusta, probConCasa: probConCasa, picksDe: picksDe, inicio: inicio, calificar: calificar, textoHandicap: textoHandicap };
+  return { NOMBRES: NOMBRES, MARGEN_CONGELAR: MARGEN_CONGELAR, MINIMO: MINIMO, SEGURO: SEGURO, MAXIMO: MAXIMO, CUANTOS: CUANTOS, MEZCLA: MEZCLA, apto: apto, mejores: mejores, conLineas: conLineas, normalizar: normalizar, indexar: indexar, parte: parte, jugadoresDe: jugadoresDe, probJugador: probJugador,
+    lineaEquipo: lineaEquipo, masDe: masDe, masQue: masQue, CUENTAS: CUENTAS, lineaJusta: lineaJusta, mezclar: mezclar, probConCasa: probConCasa, picksDe: picksDe, inicio: inicio, calificar: calificar, textoHandicap: textoHandicap };
 });

@@ -4,62 +4,44 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Simulador NFL</title>
-  <meta name="description" content="Probabilidades de victoria, hándicaps, totales y picks de jugadores de la NFL con datos reales y miles de simulaciones.">
+  <meta name="description" content="Picks de la NFL calculados con datos reales, la línea del mercado y 100 000 simulaciones por partido.">
   <link rel="icon" href="icono.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icono.svg">
-  <meta name="theme-color" content="#0d1b2e">
+  <meta name="theme-color" content="#11161d">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&display=swap">
-  <link rel="stylesheet" href="estilos.css?v=20261116g">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="estilos.css?v=20261123a">
 </head>
 <body>
-  <header class="cabecera">
-    <div class="ancho-pagina cabecera-dentro">
-      <div class="marca">
-        <h1><img src="icono.svg" alt="" width="40" height="40">Simulador <span>NFL</span></h1>
-        <p id="estado-datos">Cargando resultados reales…</p>
-      </div>
-      <div class="controles">
-        <label for="fuente">Expectativa de puntos
-          <select id="fuente">
-            <option value="modelo">Modelo estadístico</option>
-            <option value="mezcla">Mezcla modelo + mercado</option>
-            <option value="mercado">Línea del mercado</option>
-          </select>
-        </label>
-        <label for="nsims">Simulaciones por partido
-          <select id="nsims">
-            <option value="1000">1 000</option>
-            <option value="10000" selected>10 000</option>
-            <option value="50000">50 000</option>
-            <option value="100000">100 000</option>
-          </select>
-        </label>
-      </div>
+  <header class="barra">
+    <div class="ancho barra-dentro">
+      <a class="logo" href="./"><img src="icono.svg" alt="" width="28" height="28"><span>Simulador NFL</span></a>
+      <nav class="nav" aria-label="Secciones">
+        <button data-vista="jornada" aria-current="page">Partidos</button>
+        <button data-vista="picks">Mejores picks</button>
+        <button data-vista="aciertos">Aciertos</button>
+        <button data-vista="equipos">Equipos</button>
+        <button data-vista="metodo">Método</button>
+      </nav>
     </div>
-    <nav class="pestanas ancho-pagina" role="tablist">
-      <button role="tab" data-vista="jornada" aria-selected="true">Jornada</button>
-      <button role="tab" data-vista="picks" aria-selected="false">Mejores picks</button>
-      <button role="tab" data-vista="aciertos" aria-selected="false">Aciertos</button>
-      <button role="tab" data-vista="libre" aria-selected="false">Cruce libre</button>
-      <button role="tab" data-vista="equipos" aria-selected="false">Equipos</button>
-      <button role="tab" data-vista="precision" aria-selected="false">Precisión y método</button>
-    </nav>
   </header>
 
-  <main id="vista" class="ancho-pagina"><p class="tenue">Cargando…</p></main>
+  <main id="vista" class="ancho"><p class="vacio">Cargando partidos…</p></main>
 
-  <dialog id="dialogo"><div class="dialogo-cab"><h2 id="dialogo-titulo">Partido</h2><button class="cerrar" id="cerrar" aria-label="Cerrar">Cerrar ×</button></div><div id="dialogo-cuerpo"></div></dialog>
+  <dialog id="dialogo" aria-labelledby="dialogo-titulo">
+    <div class="d-barra"><h2 id="dialogo-titulo">Partido</h2><button id="cerrar" aria-label="Cerrar">Cerrar</button></div>
+    <div id="dialogo-cuerpo"></div>
+  </dialog>
   <div id="globo" class="globo" hidden></div>
 
-  <footer class="pie ancho-pagina">
-    Datos: <a href="https://github.com/nflverse" target="_blank" rel="noopener">nflverse</a> (resultados, líneas de cierre, lesiones y estadísticas de jugadores).
-    Las probabilidades son estimaciones estadísticas, no garantías ni consejos de apuesta. Si apuestas, hazlo con moderación.
+  <footer class="pie ancho">
+    <p id="estado-datos">Cargando…</p>
+    <p>Probabilidades estimadas, no garantías. Si apuestas, hazlo con moderación.</p>
   </footer>
 
   <noscript><p style="padding:24px">Esta página necesita JavaScript.</p></noscript>
-  <script src="modelo.js?v=20261116g"></script>
-  <script src="picks.js?v=20261116g"></script>
-  <script src="app.js?v=20261116g"></script>
+  <script src="modelo.js?v=20261123a"></script>
+  <script src="picks.js?v=20261123a"></script>
+  <script src="app.js?v=20261123a"></script>
 </body>
 </html>
