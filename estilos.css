@@ -95,7 +95,7 @@ main { padding-top: 22px; padding-bottom: 28px; }
 
 /* Picks */
 .picks { list-style: none; margin: 0; padding: 0; }
-.pk { display: grid; grid-template-columns: 22px 52px 1fr 70px auto; gap: 12px; align-items: center; padding: 10px 4px; border-top: 1px solid var(--linea); }
+.pk { display: grid; grid-template-columns: 22px 52px 1fr 124px auto; gap: 12px; align-items: center; padding: 10px 4px; border-top: 1px solid var(--linea); }
 .pk:first-child { border-top: 0; }
 .pk[data-id] { cursor: pointer; } .pk[data-id]:hover { background: var(--panel-2); }
 .pk-n { color: var(--tinta-3); font-size: 13px; text-align: right; }
@@ -104,7 +104,9 @@ main { padding-top: 22px; padding-bottom: 28px; }
 .pk-t b { font-weight: 600; }
 .pk-t small { display: block; color: var(--tinta-3); font-size: 12px; margin-top: 1px; }
 .pk-t em { font-style: normal; font-size: 12px; color: var(--mal); }
-.pk-c { text-align: right; font-weight: 600; } .pk-c small { display: block; font-weight: 400; font-size: 11px; color: var(--tinta-3); }
+.pk-c { text-align: right; font-weight: 600; }
+.pk-c.real { font-family: var(--titulo); font-size: 20px; font-weight: 700; }
+.pk-c.real small { font-family: var(--texto); } .pk-c small { display: block; font-weight: 400; font-size: 11px; color: var(--tinta-3); }
 .res { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 3px; color: var(--tinta-2); background: var(--panel-2); white-space: nowrap; }
 .res.bien { color: var(--bien); background: var(--bien-f); } .res.mal { color: var(--mal); background: var(--mal-f); }
 .pk.es-mal .pk-p { color: var(--tinta-3); }

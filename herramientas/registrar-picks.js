@@ -37,7 +37,7 @@ function pronosticar(p, ini, reconstruir) {
     pV: r3(sim.pVisita), pL: r3(sim.pLocal), mV: Math.round(sim.mediaVisita * 10) / 10, mL: Math.round(sim.mediaLocal * 10) / 10,
     linea: q.linea, total: q.lineaTotal, simulaciones: SIMULACIONES, e: [esp.visita, esp.local], // con «e» y la semilla la página repite la misma simulación
     picks: todos.map(k => Object.assign({ t: k.tipo, eq: k.eq, q: k.quien, que: k.que, p: r3(k.prob), m: k.m },
-      top.indexOf(k) >= 0 ? { top: 1 } : {}, k.resp ? { r: k.resp } : {}, k.cuotaReal ? { c: k.cuotaReal } : {}))
+      top.indexOf(k) >= 0 ? { top: 1 } : {}, k.resp ? { r: k.resp } : {}, k.cuotaReal ? { c: k.cuotaReal } : {}, k.linea && k.linea.estimada ? { est: 1 } : {}))
   };
 }
 // Marca lo que ya se puede saber. Los picks sin «ok» siguen pendientes; ok = null es anulado.

@@ -84,7 +84,7 @@
     var reg = E.hist[p.id], r;
     if (reg) {
       var lista = reg.picks.map(function (k) {
-        var x = { tipo: k.t, eq: k.eq, quien: k.q, que: String(k.que).replace(' (línea alternativa)', '').replace('hándicap alternativo', 'hándicap'), prob: k.p, m: k.m, resp: k.r, cuotaReal: k.c, ok: k.ok, top: k.top,
+        var x = { estimada: !!k.est, tipo: k.t, eq: k.eq, quien: k.q, que: String(k.que).replace(' (línea alternativa)', '').replace('hándicap alternativo', 'hándicap'), prob: k.p, m: k.m, resp: k.r, cuotaReal: k.c, ok: k.ok, top: k.top,
           principal: !reg.v && (k.que === 'hándicap' || k.que === 'puntos en el partido') };
         // Partido terminado y aún sin calificar en el servidor: lo que ya se puede saber se califica aquí.
         if (x.ok === undefined && p.jugado) { var o = P.calificar(x.m, p, function () { return undefined; }); if (o !== undefined) x.ok = o; }
@@ -185,7 +185,8 @@
     return '<li class="pk' + (k.ok === true ? ' es-bien' : k.ok === false ? ' es-mal' : '') + '"' + (conPartido ? ' data-id="' + k.p.id + '" tabindex="0"' : '') + '>' +
       '<span class="pk-n">' + (i + 1) + '</span><span class="pk-p">' + pct(k.prob) + '</span>' +
       '<span class="pk-t">' + (k.eq ? chip(k.eq) + ' ' : '') + '<b>' + esc(k.quien) + '</b> ' + esc(k.que) + (k.duda ? ' <em>en duda</em>' : '') + (notas ? '<small>' + notas + '</small>' : '') + '</span>' +
-      '<span class="pk-c">' + cuota(k.prob) + '<small>' + (k.cuotaReal ? 'paga ' + Number(k.cuotaReal).toFixed(2) : 'cuota justa') + '</small></span>' + estadoPick(k) + '</li>';
+      (k.cuotaReal ? '<span class="pk-c real">' + Number(k.cuotaReal).toFixed(2) + '<small>paga la casa · justa ' + cuota(k.prob) + '</small></span>' :
+        '<span class="pk-c">' + cuota(k.prob) + '<small>' + (k.estimada ? 'cuota justa · línea estimada' : 'cuota justa') + '</small></span>') + estadoPick(k) + '</li>';
   }
 
   var globo = $('globo');
@@ -254,7 +255,8 @@
       var aviso = !r.reg ? 'Calculados ahora: este partido todavía no tiene pronóstico guardado.' :
         p.jugado ? (r.pend ? r.ok + ' aciertos, ' + r.mal + ' fallos y ' + r.pend + ' por calificar: los de touchdowns y jugadores esperan las estadísticas oficiales.' :
           r.ok + ' aciertos de ' + (r.ok + r.mal) + '. Picks guardados antes del inicio.') :
-        emp ? 'Congelados antes del inicio; se califican al terminar.' : 'Pueden cambiar hasta 10 minutos antes del inicio; después quedan fijos.';
+        emp ? 'Congelados antes del inicio; se califican al terminar.' : (E.reales[p.id] && E.reales[p.id].hs ? 'Líneas y cuotas de ' + esc(E.reales[p.id].casaLineas || E.reales[p.id].casa || 'la casa') + ', bajadas el ' + new Date(E.reales[p.id].actualizado).toLocaleString('es', { weekday: 'long', hour: '2-digit', minute: '2-digit' }) + '. Quedan fijos 10 minutos antes del inicio.' :
+          'Líneas estimadas: las líneas y cuotas reales de la casa se bajan el día del partido y entonces los picks se ajustan a ellas.');
       h += '<section class="d-sec"><div class="d-tit"><h3>Los ' + r.top.length + ' picks más probables</h3><p>' + aviso + (r.reg && r.reg.reconstruido ? ' Rehechos después del partido.' : '') + '</p></div>' +
         '<ol class="picks">' + r.top.map(function (k, i) { return filaPick(k, i); }).join('') + '</ol></section>';
     } else if (r.reg) {
@@ -478,14 +480,15 @@
     h += '<div class="dos"><div class="panel texto"><h3>Cómo funciona</h3><ol>' +
       '<li><b>Puntos esperados.</b> El modelo califica a cada equipo y a su quarterback con todos los partidos desde 2010, la eficiencia por jugada y el parte de lesiones. Esa expectativa se mezcla con la línea de las casas de apuestas, ' + pct(P.MEZCLA) + ' mercado y ' + pct(1 - P.MEZCLA) + ' modelo: es la mezcla que mejor predijo en 2016-2021, y se confirmó en 2022-2025.</li>' +
       '<li><b>Simulación.</b> Cada partido se juega ' + SIMS.toLocaleString('es') + ' veces, serie ofensiva por serie: touchdowns, goles de campo, puntos extra, decisiones de final de partido y prórroga.</li>' +
-      '<li><b>Picks.</b> En hándicap, «más de X puntos» y «más touchdowns» se toma la línea más exigente que aún se cumple al menos el 70% de las veces. En yardas de jugadores, la línea real de la casa o un hito que el jugador ya logró en 7 de sus últimos 10 partidos.</li>' +
-      '<li><b>Los de cada partido.</b> Solo picks entre ' + pct(P.MINIMO) + ' y ' + pct(P.MAXIMO) + ' (cuota justa de 1.25 a 1.54), del más al menos probable, hasta 10. Cada uno lleva su razón: lo que dicen las simulaciones, el mercado y lo que llevan los equipos o el jugador este año.</li>' +
+      '<li><b>Líneas de la casa.</b> El día de cada partido se bajan las líneas y cuotas reales de una casa grande (hándicaps y totales alternativos, ganador y yardas de jugadores). Los picks se eligen solo entre esas líneas: de cada mercado, la más probable que todavía paga al menos ' + P.CUOTA_MINIMA.toFixed(2) + '. Antes de ese día se muestran con líneas estimadas.</li>' +
+      '<li><b>Los de cada partido.</b> Solo picks de al menos ' + pct(P.MINIMO) + ' que paguen ' + P.CUOTA_MINIMA.toFixed(2) + ' o más, del más al menos probable, hasta 10. Cada uno lleva su razón: lo que dicen las simulaciones, el mercado y lo que llevan los equipos o el jugador este año.</li>' +
       '<li><b>Registro.</b> Quedan fijos 10 minutos antes del inicio. Ganador, hándicap y total se califican en cuanto hay marcador; touchdowns y jugadores, cuando salen las estadísticas oficiales.</li></ol></div>' +
       '<div class="panel texto"><h3>Qué se descartó y por qué</h3><ul>' +
       '<li>Picks contra la línea principal del mercado (hándicap, total o puntos de un equipo en la línea de la casa): acertaban entre 46% y 52%.</li>' +
       '<li>Picks de 58% a 65%: acertaban menos de lo que anunciaban.</li>' +
       '<li>Goles de campo: entre 55% y 69% según la época, demasiado inestable.</li>' +
       '<li>Anotador de touchdown y «menos de 1.5 pases de touchdown»: casi nunca pasan del 55%.</li>' +
+      '<li>Touchdowns del partido o de un equipo e hitos de yardas tipo «25+»: las casas solo ofrecen la línea principal, donde la probabilidad ronda el 50%, así que no hay pick que coincida con lo que se puede apostar.</li>' +
       '<li>Todos los «menos» (puntos del partido, touchdowns del partido y de un equipo): «menos de X puntos» es el mercado más flojo en todas las épocas (72% en 2016-2025, 70% en 2026, 5 de 9 en la semana 11) y desde 2024 los partidos terminan por encima del total de las casas el 52-54% de las veces. Un partido abierto los tumba todos a la vez.</li>' +
       '<li>El modelo no lee noticias. Lo que sabe el mercado (cambios de rol, clima, rumores) entra a través de su línea.</li>' +
       '<li>También se probó exigir que el equipo ya viniera cumpliendo la línea en sus últimos partidos (como con los jugadores) y corregir el sesgo reciente de los totales: ninguna de las dos mejoró la prueba, así que no se aplican.</li>' +
