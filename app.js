@@ -99,6 +99,7 @@
       r = { pV: s.pVisita, pL: s.pLocal, mV: s.mediaVisita, mL: s.mediaLocal, top: p.jugado ? [] : P.mejores(P.picksDe(E.ctx, q, s, esp)),
         linea: q.linea, total: q.lineaTotal, esp: esp, sim: p.jugado ? null : s };
     }
+    r.top.forEach(function (k) { k.p = p; });
     r.ok = r.top.filter(function (k) { return k.ok === true; }).length;
     r.mal = r.top.filter(function (k) { return k.ok === false; }).length;
     r.pend = r.top.filter(function (k) { return k.ok === undefined; }).length;
@@ -122,6 +123,56 @@
     return (E.resumen[t] = r);
   }
 
+  // ---------- por qué de cada pick ----------
+  // Lo que lleva cada equipo esta temporada antes de la fecha del partido (puntos y touchdowns).
+  function historialEquipo(t, fecha) {
+    var g = [];
+    E.partidos.forEach(function (p) {
+      if (p.temporada !== E.ultima || !p.jugado || p.fecha >= fecha || (p.local !== t && p.visita !== t)) return;
+      var casa = p.local === t;
+      g.push({ pf: casa ? p.ptsLocal : p.ptsVisita, pc: casa ? p.ptsVisita : p.ptsLocal, tf: casa ? p.tdLocal : p.tdVisita, tc: casa ? p.tdVisita : p.tdLocal, tot: p.ptsLocal + p.ptsVisita,
+        tdt: p.tdLocal != null && p.tdVisita != null ? p.tdLocal + p.tdVisita : null });
+    });
+    return g;
+  }
+  function media(g, f) { var v = g.map(f).filter(function (x) { return x != null; }); return v.length ? v.reduce(function (a, b) { return a + b; }, 0) / v.length : null; }
+  function cuantos(g, f) { var v = g.filter(function (x) { return f(x) != null; }); return v.filter(function (x) { return f(x); }).length + ' de ' + v.length; }
+  var HISTORICO = { gana: 'Ganador', handicap: 'Hándicap alternativo', total: 'Total de puntos alternativo', tds: 'Touchdowns del partido', tdsEquipo: 'Touchdowns de un equipo' };
+  /* Una línea con los datos que sostienen el pick: lo que dicen las simulaciones, el mercado y lo que
+     llevan los equipos este año, más cuánto acertó ese tipo de pick en la prueba de 2016-2025. */
+  function razon(k) {
+    var p = k.p, m = k.m || {}, r = pronostico(p), x = [], otro, g, h, dif;
+    if (m.m === 'yardas' || m.m === 'tdPase') return k.resp || '';
+    if (m.m === 'gana') {
+      var fav = r.linea > 0 ? p.local : r.linea < 0 ? p.visita : null;
+      x.push('gana en el ' + pct(k.prob) + ' de las simulaciones');
+      x.push(fav === m.eq ? 'el mercado lo da favorito por ' + Math.abs(r.linea) : fav ? 'el mercado da favorito al rival por ' + Math.abs(r.linea) : 'el mercado lo ve parejo');
+      x.push('marca ' + resumenEquipo(m.eq).marca);
+    } else if (m.m === 'handicap') {
+      dif = m.eq === p.local ? r.mL - r.mV : r.mV - r.mL;
+      x.push('pronóstico: ' + (dif >= 0 ? 'gana por ' + n1(dif) : 'pierde por ' + n1(-dif)));
+      x.push(m.linea > 0 ? 'pierde por más de ' + m.linea + ' solo en el ' + pct(1 - k.prob) + ' de las simulaciones' : 'gana por más de ' + Math.abs(m.linea) + ' en el ' + pct(k.prob));
+      x.push('contra el hándicap este año ' + resumenEquipo(m.eq).handicap);
+    } else if (m.m === 'total') {
+      x.push('pronóstico ' + n1(r.mV + r.mL) + ' puntos' + (r.total != null ? ', mercado ' + r.total : ''));
+      g = historialEquipo(p.visita, p.fecha); h = historialEquipo(p.local, p.fecha);
+      if (g.length && h.length) x.push('sus partidos este año: ' + p.visita + ' ' + n1(media(g, function (y) { return y.tot; })) + ', ' + p.local + ' ' + n1(media(h, function (y) { return y.tot; })) + ' de media');
+    } else if (m.m === 'tds') {
+      g = historialEquipo(p.visita, p.fecha); h = historialEquipo(p.local, p.fecha);
+      var tv = media(g, function (y) { return y.tdt; }), tl = media(h, function (y) { return y.tdt; });
+      if (tv != null && tl != null) x.push('touchdowns por partido en sus juegos: ' + p.visita + ' ' + n1(tv) + ', ' + p.local + ' ' + n1(tl));
+      if (g.length) x.push('más de ' + m.linea + ' en ' + cuantos(g.concat(h), function (y) { return y.tdt == null ? null : y.tdt > m.linea; }) + ' de esos partidos');
+    } else if (m.m === 'tdsEquipo') {
+      otro = m.eq === p.local ? p.visita : p.local; g = historialEquipo(m.eq, p.fecha); h = historialEquipo(otro, p.fecha);
+      var a = media(g, function (y) { return y.tf; }), c = media(h, function (y) { return y.tc; });
+      if (a != null) x.push(m.eq + ' anota ' + n1(a) + ' touchdowns por partido (más de ' + m.linea + ' en ' + cuantos(g, function (y) { return y.tf == null ? null : y.tf > m.linea; }) + ')');
+      if (c != null) x.push(otro + ' permite ' + n1(c));
+    }
+    var v = E.valid && E.valid.tipos.filter(function (t) { return t.tipo === HISTORICO[m.m]; })[0];
+    if (v) x.push('histórico de este tipo de pick: ' + pct(v.acierto));
+    return x.join(' · ');
+  }
+
   // ---------- piezas comunes ----------
   function estadoPick(k) {
     if (k.ok === true) return '<span class="res bien">Acertó</span>';
@@ -130,7 +181,7 @@
     return '';
   }
   function filaPick(k, i, conPartido) {
-    var notas = [conPartido ? esc(k.p.visita + ' en ' + k.p.local) : '', esc(k.resp || '')].filter(Boolean).join(' · ');
+    var notas = [conPartido ? esc(k.p.visita + ' en ' + k.p.local) : '', esc(razon(k))].filter(Boolean).join(' · ');
     return '<li class="pk' + (k.ok === true ? ' es-bien' : k.ok === false ? ' es-mal' : '') + '"' + (conPartido ? ' data-id="' + k.p.id + '" tabindex="0"' : '') + '>' +
       '<span class="pk-n">' + (i + 1) + '</span><span class="pk-p">' + pct(k.prob) + '</span>' +
       '<span class="pk-t">' + (k.eq ? chip(k.eq) + ' ' : '') + '<b>' + esc(k.quien) + '</b> ' + esc(k.que) + (k.duda ? ' <em>en duda</em>' : '') + (notas ? '<small>' + notas + '</small>' : '') + '</span>' +
@@ -332,7 +383,7 @@
   // ---------- vista: mejores picks de la jornada ----------
   function vistaPicks() {
     var todos = [];
-    partidosDeJornada().forEach(function (p) { if (iniciado(p)) return; pronostico(p).top.forEach(function (k) { k.p = p; todos.push(k); }); });
+    partidosDeJornada().forEach(function (p) { if (iniciado(p)) return; pronostico(p).top.forEach(function (k) { todos.push(k); }); });
     todos.sort(function (a, b) { return b.prob - a.prob; });
     var ver = todos.slice(0, 40);
     vista.innerHTML = cabecera('Mejores picks') +
@@ -427,16 +478,17 @@
     h += '<div class="dos"><div class="panel texto"><h3>Cómo funciona</h3><ol>' +
       '<li><b>Puntos esperados.</b> El modelo califica a cada equipo y a su quarterback con todos los partidos desde 2010, la eficiencia por jugada y el parte de lesiones. Esa expectativa se mezcla con la línea de las casas de apuestas, ' + pct(P.MEZCLA) + ' mercado y ' + pct(1 - P.MEZCLA) + ' modelo: es la mezcla que mejor predijo en 2016-2021, y se confirmó en 2022-2025.</li>' +
       '<li><b>Simulación.</b> Cada partido se juega ' + SIMS.toLocaleString('es') + ' veces, serie ofensiva por serie: touchdowns, goles de campo, puntos extra, decisiones de final de partido y prórroga.</li>' +
-      '<li><b>Picks.</b> En hándicap, total y «más touchdowns» se toma la línea más exigente que aún se cumple al menos el 70% de las veces. En yardas de jugadores, la línea real de la casa o un hito que el jugador ya logró en 7 de sus últimos 10 partidos.</li>' +
-      '<li><b>Los 10 de cada partido.</b> Solo picks entre ' + pct(P.MINIMO) + ' y ' + pct(P.MAXIMO) + ' (cuota justa de 1.25 a 1.54), del más al menos probable.</li>' +
+      '<li><b>Picks.</b> En hándicap, «más de X puntos» y «más touchdowns» se toma la línea más exigente que aún se cumple al menos el 70% de las veces. En yardas de jugadores, la línea real de la casa o un hito que el jugador ya logró en 7 de sus últimos 10 partidos.</li>' +
+      '<li><b>Los de cada partido.</b> Solo picks entre ' + pct(P.MINIMO) + ' y ' + pct(P.MAXIMO) + ' (cuota justa de 1.25 a 1.54), del más al menos probable, hasta 10. Cada uno lleva su razón: lo que dicen las simulaciones, el mercado y lo que llevan los equipos o el jugador este año.</li>' +
       '<li><b>Registro.</b> Quedan fijos 10 minutos antes del inicio. Ganador, hándicap y total se califican en cuanto hay marcador; touchdowns y jugadores, cuando salen las estadísticas oficiales.</li></ol></div>' +
       '<div class="panel texto"><h3>Qué se descartó y por qué</h3><ul>' +
       '<li>Picks contra la línea principal del mercado (hándicap, total o puntos de un equipo en la línea de la casa): acertaban entre 46% y 52%.</li>' +
       '<li>Picks de 58% a 65%: acertaban menos de lo que anunciaban.</li>' +
       '<li>Goles de campo: entre 55% y 69% según la época, demasiado inestable.</li>' +
       '<li>Anotador de touchdown y «menos de 1.5 pases de touchdown»: casi nunca pasan del 55%.</li>' +
-      '<li>«Menos touchdowns» del partido o de un equipo: acertaban como el resto, pero se retiraron porque basta un partido abierto para fallarlos.</li>' +
+      '<li>Todos los «menos» (puntos del partido, touchdowns del partido y de un equipo): «menos de X puntos» es el mercado más flojo en todas las épocas (72% en 2016-2025, 70% en 2026, 5 de 9 en la semana 11) y desde 2024 los partidos terminan por encima del total de las casas el 52-54% de las veces. Un partido abierto los tumba todos a la vez.</li>' +
       '<li>El modelo no lee noticias. Lo que sabe el mercado (cambios de rol, clima, rumores) entra a través de su línea.</li>' +
+      '<li>También se probó exigir que el equipo ya viniera cumpliendo la línea en sus últimos partidos (como con los jugadores) y corregir el sesgo reciente de los totales: ninguna de las dos mejoró la prueba, así que no se aplican.</li>' +
       '<li>Ningún pick es seguro: un 75% falla una de cada cuatro veces, y los picks de un mismo partido suelen fallar juntos.</li></ul></div></div>';
     vista.innerHTML = h;
   }

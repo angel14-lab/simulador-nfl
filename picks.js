@@ -164,7 +164,9 @@
       if (r.menos >= SEGURO && !menosT) menosT = { l: lt, q: r.menos };
     }
     if (masT) poner('total', null, 'Más de ' + masT.l, 'puntos en el partido', masT.q, { m: 'total', mas: true, linea: masT.l });
-    if (menosT) poner('total', null, 'Menos de ' + menosT.l, 'puntos en el partido', menosT.q, { m: 'total', mas: false, linea: menosT.l });
+    // «Menos de X puntos» no se propone: es el mercado más flojo en todas las épocas (72% en 2016-2025, 70% en 2026)
+    // y desde 2024 los partidos terminan por encima del total de las casas en el 52-54% de los casos.
+    void menosT;
 
     // Touchdowns del partido y de cada equipo, con la misma regla del 70%.
     function escalera(cuenta, lineas, hacer) {
@@ -229,7 +231,7 @@
     var m = k.m || {};
     if (k.tipo === 'td' || m.m === 'td' || m.m === 'fg' || m.m === 'equipo') return false;
     if (m.m === 'tdPase' && m.mas === false) return false;
-    if ((m.m === 'tds' || m.m === 'tdsEquipo') && m.mas === false) return false; // «menos touchdowns»: retirado
+    if ((m.m === 'tds' || m.m === 'tdsEquipo' || m.m === 'total') && m.mas === false) return false; // «menos»: retirados
     if (k.principal) return false; // hándicap o total en la línea principal del mercado (pronósticos antiguos)
     return k.prob >= MINIMO && k.prob <= MAXIMO;
   }
