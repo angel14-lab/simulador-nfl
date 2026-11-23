@@ -90,7 +90,7 @@
         if (x.ok === undefined && p.jugado) { var o = P.calificar(x.m, p, function () { return undefined; }); if (o !== undefined) x.ok = o; }
         return x;
       });
-      var top = (reg.v ? lista.filter(function (k) { return k.top; }) : P.mejores(lista)).sort(function (a, b) { return b.prob - a.prob; });
+      var top = (reg.v ? lista.filter(function (k) { return k.top && P.apto(k); }) : P.mejores(lista)).sort(function (a, b) { return b.prob - a.prob; });
       r = { pV: reg.pV, pL: reg.pL, mV: reg.mV, mL: reg.mL, top: top, reg: reg, linea: reg.v ? reg.linea : p.linea, total: reg.v ? reg.total : p.lineaTotal,
         esp: reg.e ? { visita: reg.e[0], local: reg.e[1] } : { visita: Math.max(3, p.pred.visita), local: Math.max(3, p.pred.local) } };
     } else {
@@ -427,7 +427,7 @@
     h += '<div class="dos"><div class="panel texto"><h3>Cómo funciona</h3><ol>' +
       '<li><b>Puntos esperados.</b> El modelo califica a cada equipo y a su quarterback con todos los partidos desde 2010, la eficiencia por jugada y el parte de lesiones. Esa expectativa se mezcla con la línea de las casas de apuestas, ' + pct(P.MEZCLA) + ' mercado y ' + pct(1 - P.MEZCLA) + ' modelo: es la mezcla que mejor predijo en 2016-2021, y se confirmó en 2022-2025.</li>' +
       '<li><b>Simulación.</b> Cada partido se juega ' + SIMS.toLocaleString('es') + ' veces, serie ofensiva por serie: touchdowns, goles de campo, puntos extra, decisiones de final de partido y prórroga.</li>' +
-      '<li><b>Picks.</b> En hándicap, total y touchdowns se toma la línea más exigente que aún se cumple al menos el 70% de las veces. En yardas de jugadores, la línea real de la casa o un hito que el jugador ya logró en 7 de sus últimos 10 partidos.</li>' +
+      '<li><b>Picks.</b> En hándicap, total y «más touchdowns» se toma la línea más exigente que aún se cumple al menos el 70% de las veces. En yardas de jugadores, la línea real de la casa o un hito que el jugador ya logró en 7 de sus últimos 10 partidos.</li>' +
       '<li><b>Los 10 de cada partido.</b> Solo picks entre ' + pct(P.MINIMO) + ' y ' + pct(P.MAXIMO) + ' (cuota justa de 1.25 a 1.54), del más al menos probable.</li>' +
       '<li><b>Registro.</b> Quedan fijos 10 minutos antes del inicio. Ganador, hándicap y total se califican en cuanto hay marcador; touchdowns y jugadores, cuando salen las estadísticas oficiales.</li></ol></div>' +
       '<div class="panel texto"><h3>Qué se descartó y por qué</h3><ul>' +
@@ -435,6 +435,7 @@
       '<li>Picks de 58% a 65%: acertaban menos de lo que anunciaban.</li>' +
       '<li>Goles de campo: entre 55% y 69% según la época, demasiado inestable.</li>' +
       '<li>Anotador de touchdown y «menos de 1.5 pases de touchdown»: casi nunca pasan del 55%.</li>' +
+      '<li>«Menos touchdowns» del partido o de un equipo: acertaban como el resto, pero se retiraron porque basta un partido abierto para fallarlos.</li>' +
       '<li>El modelo no lee noticias. Lo que sabe el mercado (cambios de rol, clima, rumores) entra a través de su línea.</li>' +
       '<li>Ningún pick es seguro: un 75% falla una de cada cuatro veces, y los picks de un mismo partido suelen fallar juntos.</li></ul></div></div>';
     vista.innerHTML = h;

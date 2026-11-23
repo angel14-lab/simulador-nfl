@@ -171,7 +171,9 @@
       var mas = null, menos = null;
       lineas.forEach(function (l) { var q = masQue(sim, cuenta, l); if (q >= SEGURO) mas = { l: l, q: q }; if (1 - q >= SEGURO && !menos) menos = { l: l, q: 1 - q }; });
       if (mas) hacer(true, mas);
-      if (menos) hacer(false, menos);
+      // Los «menos touchdowns» no se proponen: en la prueba no acertaban más que el resto y basta un
+      // partido abierto para fallarlos (la mitad de los equipos anota 3 o más touchdowns).
+      void menos;
     }
     escalera(CUENTAS.tds(sim), [2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5], function (mas, x) {
       // Los «menos touchdowns» del partido aciertan unos 2.5 puntos menos de lo que dice la simulación: se moderan.
@@ -227,6 +229,7 @@
     var m = k.m || {};
     if (k.tipo === 'td' || m.m === 'td' || m.m === 'fg' || m.m === 'equipo') return false;
     if (m.m === 'tdPase' && m.mas === false) return false;
+    if ((m.m === 'tds' || m.m === 'tdsEquipo') && m.mas === false) return false; // «menos touchdowns»: retirado
     if (k.principal) return false; // hándicap o total en la línea principal del mercado (pronósticos antiguos)
     return k.prob >= MINIMO && k.prob <= MAXIMO;
   }
