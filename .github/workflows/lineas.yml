@@ -1,12 +1,12 @@
 name: Líneas de casas de apuestas
 
 # Baja las líneas y cuotas reales (ganador, hándicaps y totales alternativos, yardas de jugadores)
-# con The Odds API el mismo día de cada partido, una sola vez por partido, para no pasar del cupo
-# gratuito. Dos horarios por si GitHub retrasa uno. Necesita el secreto ODDS_API_KEY.
+# con The Odds API: los del partido el mismo día, los de jugadores entre 100 y 10 minutos antes del
+# inicio (ya publicados los inactivos). Corre cada 20 minutos pero solo gasta créditos cuando a un
+# partido le toca una de esas dos bajadas. Necesita el secreto ODDS_API_KEY.
 on:
   schedule:
-    - cron: '7 13 * * *'
-    - cron: '7 21 * * *'
+    - cron: '7,27,47 * * * *'
   workflow_dispatch:
 
 permissions:

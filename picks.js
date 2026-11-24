@@ -19,14 +19,15 @@
   var CUANTOS = 10;   // picks que se muestran por partido
   var MEZCLA = 0.85;  // peso de la línea del mercado al calcular los puntos esperados (validar-picks.js)
   var SEGURO = 0.70;  // probabilidad que se busca al elegir una línea alternativa
+  var CALIBRA_JUGADOR = 0.7; // ver el comentario de los picks de jugadores
   var CUOTA_MINIMA = 1.25; // con cuota real de la casa, no se propone nada que pague menos
   var MAXIMO = 0.80;  // por encima de esto la cuota justa baja de 1.25 y el pick deja de interesar
   var RECIENTE = 0.70; // un hito de yardas solo se propone si el jugador lo logró en esta parte de sus últimos partidos
   // Hitos de yardas que se proponen como pick, con la columna de los partidos del jugador donde está el dato real.
   var HITOS = {
-    pase: { nombre: 'yardas de pase', col: 4, escala: [150, 175, 200, 225, 250, 275, 300] },
-    carrera: { nombre: 'yardas por tierra', col: 7, escala: [25, 40, 50, 60, 75, 100] },
-    recepcion: { nombre: 'yardas de recepción', col: 11, escala: [25, 40, 50, 60, 75, 100] }
+    pase: { nombre: 'yardas de pase', col: 4, escala: [150, 175, 200, 225, 250, 275, 300], uso: 3, usoMin: 25, usoTexto: function (u) { return Math.round(u) + ' pases por partido'; } },
+    carrera: { nombre: 'yardas por tierra', col: 7, escala: [25, 40, 50, 60, 75, 100], uso: 6, usoMin: 10, usoTexto: function (u) { return Math.round(u) + ' acarreos por partido'; } },
+    recepcion: { nombre: 'yardas de recepción', col: 11, escala: [25, 40, 50, 60, 75, 100], uso: 9, usoMin: 4, usoTexto: function (u) { return u.toFixed(1) + ' objetivos por partido'; } }
   };
 
   // Nombre de jugador sin acentos, signos ni sufijos (Jr., III), para casar fuentes distintas.
@@ -191,24 +192,36 @@
        casas no suelen ofrecer. */
 
     // Jugadores: solo sobre la línea real de la casa, promediando el modelo con lo que dicen sus cuotas.
-    /* Yardas de jugadores: retiradas de los picks. Sobre líneas parecidas a las de una casa (la mediana de
-       sus últimos partidos), en 6 211 casos de 2023-2025 los picks fuertes anunciaban 69% y acertaron 64%,
-       peor aún en jugadores de poco uso (caso Van Jefferson, semana 11). */
-    var hayReales = false && !!(ctx.lineas && ctx.lineas[p.id] && ctx.lineas[p.id].jug && Object.keys(ctx.lineas[p.id].jug).length);
-    var casa = hayReales ? ctx.lineas[p.id].casaJugadores || 'la casa' : '';
-    if (hayReales) [['v', p.visita], ['l', p.local]].forEach(function (x) {
-      jugadoresDe(ctx, p, x[0], reconstruir).forEach(function (j) {
-        var reales = ctx.lineas[p.id].jug[normalizar(j.j.n)];
-        if (!reales) return;
-        Object.keys(HITOS).forEach(function (k) {
-          if (!j.pr[k] || !reales[k]) return;
-          var rl = reales[k], mas = probConCasa(j.pr, k, rl).mas, arriba = mas >= 0.5;
-          var logrados = j.previos.filter(function (g) { return arriba ? g[HITOS[k].col] > rl.l : g[HITOS[k].col] < rl.l; }).length;
-          poner('jug', j.eq, j.j.n, (arriba ? 'más de ' : 'menos de ') + rl.l + ' ' + HITOS[k].nombre, Math.max(mas, 1 - mas), { m: 'yardas', id: j.j.id, est: k, linea: rl.l, mas: arriba },
-            { duda: j.duda, cuotaReal: arriba ? rl.mas : rl.menos, resp: 'lo logró en ' + logrados + ' de sus últimos ' + j.previos.length, linea: { estimada: false, casa: casa } });
+    /* Yardas de jugadores, solo si están confirmados: la casa todavía ofrece su línea en la bajada que se
+       hace entre 100 y 10 minutos antes del inicio, ya publicados los inactivos (si un jugador no juega,
+       la casa retira su línea). Además el jugador debe tener rol fijo: jugó 3 de los 4 últimos partidos
+       del equipo y promedia el uso mínimo (25 pases, 10 acarreos o 4 objetivos por partido).
+       La probabilidad del modelo se calibra (factor 0.7, ajustado con 2023-2024): así, los picks de 65% o
+       más acertaron 70.3% en 2023-2024 y 69.2% en 2025, que no se usó para ajustar. */
+    var R2 = ctx.lineas && ctx.lineas[p.id];
+    if (R2 && R2.confirmado && R2.jug) {
+      var hora = new Date(R2.confirmado), antes = Math.round(((inicio(p) || hora) - hora) / 60000);
+      [['v', p.visita], ['l', p.local]].forEach(function (x) {
+        var semanasEq = Object.keys(ctx.semanas[x[1]] || {}).map(Number).filter(function (s) { return s < p.semana; }).sort(function (a, b) { return b - a; }).slice(0, 4);
+        jugadoresDe(ctx, p, x[0], reconstruir).forEach(function (j) {
+          var reales = R2.jug[normalizar(j.j.n)];
+          if (!reales) return;
+          var temp = j.j.j.filter(function (g) { return g[0] === p.temporada && g[1] < p.semana; });
+          var jugo = semanasEq.filter(function (s) { return temp.some(function (g) { return g[1] === s; }); }).length;
+          if (temp.length < 3 || jugo < 3) return;
+          Object.keys(HITOS).forEach(function (k) {
+            if (!j.pr[k] || !reales[k]) return;
+            var uso = temp.reduce(function (a, g) { return a + g[HITOS[k].uso]; }, 0) / temp.length;
+            if (uso < HITOS[k].usoMin) return;
+            var rl = reales[k], q = 0.5 + (M.probAlMenos(j.pr[k].m, j.pr[k].sd, Math.floor(rl.l) + 1) - 0.5) * CALIBRA_JUGADOR, arriba = q >= 0.5;
+            var logrados = j.previos.filter(function (g) { return arriba ? g[HITOS[k].col] > rl.l : g[HITOS[k].col] < rl.l; }).length;
+            poner('jug', j.eq, j.j.n, (arriba ? 'más de ' : 'menos de ') + rl.l + ' ' + HITOS[k].nombre, Math.max(q, 1 - q), { m: 'yardas', id: j.j.id, est: k, linea: rl.l, mas: arriba },
+              { duda: j.duda, cuotaReal: arriba ? rl.mas : rl.menos,
+                resp: 'confirmado ' + antes + ' min antes del inicio · ' + HITOS[k].usoTexto(uso) + ' · jugó ' + jugo + ' de los 4 últimos · lo logró en ' + logrados + ' de sus últimos ' + j.previos.length });
+          });
         });
       });
-    });
+    }
     return lista.sort(function (a, b) { return b.prob - a.prob; });
   }
   // Acerca una probabilidad al 50% un 10%: 76% pasa a 73%.
