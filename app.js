@@ -249,12 +249,12 @@
       '<div class="d-cab">' + lado(p.visita, 'v', r.pV, r.mV) +
       '<div class="d-centro">' + (p.jugado ? '<span>Final</span><b>' + p.ptsVisita + ' – ' + p.ptsLocal + '</b>' : '<span>Mercado</span><b>' + lineaTexto(r.linea, r.total, p) + '</b>') + '</div>' +
       lado(p.local, 'l', r.pL, r.mL) + '</div>' +
-      '<div class="reparto"><i style="flex:' + r.pV + ';background:' + EQ[p.visita][1] + '"></i><i style="flex:' + r.pL + ';background:' + EQ[p.local][1] + '"></i></div>';
+      bajasResumen(p) + '<div class="reparto"><i style="flex:' + r.pV + ';background:' + EQ[p.visita][1] + '"></i><i style="flex:' + r.pL + ';background:' + EQ[p.local][1] + '"></i></div>';
 
     if (r.top.length) {
       var aviso = !r.reg ? 'Calculados ahora: este partido todavía no tiene pronóstico guardado.' :
         p.jugado ? (r.pend ? r.ok + ' aciertos, ' + r.mal + ' fallos y ' + r.pend + ' por calificar: los de touchdowns y jugadores esperan las estadísticas oficiales.' :
-          r.ok + ' aciertos de ' + (r.ok + r.mal) + '. Picks guardados antes del inicio.') :
+          r.ok + (r.ok === 1 ? ' acierto' : ' aciertos') + ' de ' + (r.ok + r.mal) + '. Picks guardados antes del inicio.') :
         emp ? 'Congelados antes del inicio; se califican al terminar.' : (E.reales[p.id] && E.reales[p.id].hs ? 'Líneas y cuotas de ' + esc(E.reales[p.id].casaLineas || E.reales[p.id].casa || 'la casa') + ', bajadas el ' + new Date(E.reales[p.id].actualizado).toLocaleString('es', { weekday: 'long', hour: '2-digit', minute: '2-digit' }) + '. ' + (E.reales[p.id].confirmado ? 'Jugadores confirmados ' + Math.round((P.inicio(p) - Date.parse(E.reales[p.id].confirmado)) / 60000) + ' min antes del inicio.' : 'Los picks de jugadores aparecen cuando se confirma quién juega, entre 100 y 10 minutos antes del inicio.') + ' Quedan fijos 10 minutos antes del inicio.' :
           'Líneas estimadas: las líneas y cuotas reales de la casa se bajan el día del partido y entonces los picks se ajustan a ellas.');
       h += '<section class="d-sec"><div class="d-tit"><h3>Los ' + r.top.length + ' picks más probables</h3><p>' + aviso + (r.reg && r.reg.reconstruido ? ' Rehechos después del partido.' : '') + '</p></div>' +
@@ -279,6 +279,18 @@
     var d = $('dialogo');
     d.querySelector('.analisis').addEventListener('toggle', function () { if (this.open && !this.dataset.listo) { this.dataset.listo = '1'; graficos(p, r); } });
     d.showModal(); d.scrollTop = 0;
+  }
+  // Descartados y dudosos del parte oficial, con la fecha del parte: lo primero que hay que mirar antes de apostar.
+  function bajasResumen(p) {
+    var sem = P.parte(E.lesiones, p);
+    if (!sem) return p.jugado ? '' : '<p class="bajas-res">Todavía no hay parte oficial de lesiones para esta jornada (sale de miércoles a viernes).</p>';
+    var fecha = E.lesiones.modificado && E.lesiones.modificado[p.semana], texto = { Out: 'fuera', Doubtful: 'dudoso', Questionable: 'en duda' };
+    function eq(t) {
+      var js = (sem[t] || []).filter(function (j) { return texto[j.e] && j.p !== 'LS' && j.p !== 'P' && j.p !== 'K'; });
+      var fuera = js.filter(function (j) { return j.e !== 'Questionable'; }), qb = js.filter(function (j) { return j.p === 'QB'; });
+      return '<span>' + chip(t) + ' ' + fuera.length + ' fuera o dudosos, ' + (js.length - fuera.length) + ' en duda' + (qb.length ? ' · <b>QB ' + esc(qb.map(function (j) { return apellido(j.n) + ' ' + texto[j.e]; }).join(', ')) + '</b>' : '') + '</span>';
+    }
+    return '<p class="bajas-res">' + eq(p.visita) + eq(p.local) + '<small>Parte oficial de la NFL' + (fecha ? ' del ' + new Date(fecha).toLocaleString('es', { weekday: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '') + (E.lesiones.bajado && !p.jugado ? ', consultado el ' + new Date(E.lesiones.bajado).toLocaleString('es', { weekday: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '') + '. Detalle en «Análisis del partido».</small></p>';
   }
   function comparacion(v, l) {
     var a = resumenEquipo(v), b = resumenEquipo(l), ea = E.jug && E.jug.equipos[v], eb = E.jug && E.jug.equipos[l];
@@ -483,6 +495,7 @@
       '<li><b>Líneas de la casa.</b> El día de cada partido se bajan las líneas y cuotas reales de una casa grande (ganador, hándicaps y totales alternativos, y cerca del inicio las yardas de jugadores). Los picks se eligen solo entre esas líneas: de cada mercado, la más probable que todavía paga al menos ' + P.CUOTA_MINIMA.toFixed(2) + '. Antes de ese día se muestran con líneas estimadas.</li>' +
       '<li><b>Los de cada partido.</b> Solo picks de al menos ' + pct(P.MINIMO) + ' que paguen ' + P.CUOTA_MINIMA.toFixed(2) + ' o más, del más al menos probable, hasta 10. Cada uno lleva su razón: lo que dicen las simulaciones, el mercado y lo que llevan los equipos o el jugador este año.</li>' +
       '<li><b>Jugadores confirmados.</b> Sus líneas se bajan entre 100 y 10 minutos antes del inicio, ya publicados los inactivos: si la casa retiró la línea de un jugador, no juega y no hay pick. Además debe tener rol fijo (jugó 3 de los 4 últimos partidos y promedia 25 pases, 10 acarreos o 4 objetivos). Su probabilidad está calibrada: sin calibrar, el modelo exageraba unos 5 puntos; calibrada, los de 65% o más acertaron 70% en 2023-2024 y 69% en 2025.</li>' +
+      '<li><b>Información al día.</b> Cada 20 minutos se vuelven a bajar el parte oficial de lesiones, los quarterbacks anunciados y los marcadores. En las 4 horas previas al partido se toma la línea vigente de la casa, que ya recoge las noticias de última hora (lesiones, clima, cambios de titular), y con ella se recalcula todo. Los jugadores «en duda» no reciben picks de «más de».</li>' +
       '<li><b>Registro.</b> Quedan fijos 10 minutos antes del inicio. Ganador, hándicap y total se califican en cuanto hay marcador; touchdowns y jugadores, cuando salen las estadísticas oficiales.</li></ol></div>' +
       '<div class="panel texto"><h3>Qué se descartó y por qué</h3><ul>' +
       '<li>Picks contra la línea principal del mercado (hándicap, total o puntos de un equipo en la línea de la casa): acertaban entre 46% y 52%.</li>' +

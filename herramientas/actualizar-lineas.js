@@ -2,7 +2,7 @@
 // Necesita la clave en ODDS_API_KEY; sin ella no hace nada.
 //
 // Dos peticiones por partido, 3 créditos cada una (1 por mercado), unos 96 por semana:
-//   1. el día del partido: ganador, hándicaps alternativos y totales alternativos;
+//   1. en las 4 horas previas: ganador, hándicaps alternativos y totales alternativos;
 //   2. entre 100 y 10 minutos antes del inicio: yardas de pase, carrera y recepción (confirma quién juega).
 // La lista de partidos (/events) no gasta créditos.
 const fs = require('fs'), path = require('path');
@@ -15,7 +15,7 @@ const JUGADOR = ['player_pass_yds', 'player_rush_yds', 'player_reception_yds'];
 const DE_JUGADOR = { player_pass_yds: 'pase', player_rush_yds: 'carrera', player_reception_yds: 'recepcion' };
 // Confirmación de jugadores: entre 100 y 10 minutos antes del inicio, ya publicados los inactivos.
 const CONF_DESDE = Number(process.env.CONF_DESDE || 100), CONF_HASTA = 10, MINUTO = 60 * 1000;
-const HORAS = Number(process.env.HORAS || 16), HORA = 3600 * 1000;
+const HORAS = Number(process.env.HORAS || 4), HORA = 3600 * 1000; // mercados del partido: en las 4 horas previas, con las noticias del día
 if (!CLAVE) { console.log('Sin ODDS_API_KEY: no se bajan líneas.'); process.exit(0); }
 
 const codigo = {}; Object.keys(P.NOMBRES).forEach(c => { codigo[P.NOMBRES[c]] = c; });
@@ -57,6 +57,11 @@ const resultados = (casa, clave) => casa.markets.find(m => m.key === clave).outc
       if (casa) { reg.casaLineas = casa.title; resultados(casa, 'alternate_spreads').forEach(o => { const e = codigo[o.name]; if (e && o.point != null) (reg.hs[e] = reg.hs[e] || {})[o.point] = o.price; }); }
       casa = casaCon(det, 'alternate_totals');
       if (casa) resultados(casa, 'alternate_totals').forEach(o => { if (o.point != null) reg.ts[o.name === 'Over' ? 'mas' : 'menos'][o.point] = o.price; });
+      // Línea principal de ese momento: la del hándicap y la del total donde los dos lados pagan casi lo mismo.
+      // Con ella se calculan los puntos esperados, así recoge las noticias de última hora que mueven el mercado.
+      const principal = (a, b) => { let m = null; Object.keys(a || {}).forEach(l => { const o = b(l); if (o && (!m || Math.abs(a[l] - o) < m.d)) m = { l: Number(l), d: Math.abs(a[l] - o) }; }); return m && m.l; };
+      reg.h = principal(reg.hs[local], l => reg.hs[visita] && reg.hs[visita][-Number(l)]);
+      reg.t = principal(reg.ts.mas, l => reg.ts.menos[l]);
       reg.partido = reg.actualizado = new Date().toISOString(); bajados++; creditos += PARTIDO.length;
     }
     // 2. Jugadores: una vez, cerca del inicio. Si la casa ya no ofrece la línea de un jugador, no juega.

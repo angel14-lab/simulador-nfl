@@ -24,6 +24,7 @@ jobs:
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         run: |
+          node herramientas/actualizar-datos.js
           node herramientas/actualizar-lineas.js
           node herramientas/registrar-picks.js
       - name: Guardar si hubo cambios

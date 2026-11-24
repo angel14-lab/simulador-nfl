@@ -69,7 +69,7 @@ async function guardarJugadores(ultima, datos) {
   const filas = M.leerCSV(await leer('games.csv', PARTIDOS)).filter(f => Number(f.season) >= DESDE);
   if (filas.length < 4000) throw new Error('games.csv incompleto');
   const ultima = Math.max(...filas.map(f => Number(f.season)));
-  const epa = {}, bajas = {}, parte = {}, tds = {}, goles = {};
+  const epa = {}, bajas = {}, parte = {}, tds = {}, goles = {}, modificado = {};
   for (let a = DESDE; a <= ultima; a++) {
     const viejo = a < ultima; // la temporada en curso puede no tener archivos todavía
     M.leerCSV(await leer(`st_${a}.csv`, `${PUBLICADOS}stats_team/stats_team_week_${a}.csv`, !viejo)).forEach(r => {
@@ -82,6 +82,7 @@ async function guardarJugadores(ultima, datos) {
     M.leerCSV(await leer(`inj_${a}.csv`, `${PUBLICADOS}injuries/injuries_${a}.csv`, !viejo)).forEach(r => {
       if (!r.report_status) return;
       const equipo = alias(r.team), semana = Number(r.week);
+      if (a === ultima && r.date_modified && r.date_modified > (modificado[semana] || '')) modificado[semana] = r.date_modified;
       if (a === ultima) ((parte[semana] = parte[semana] || {})[equipo] = parte[semana][equipo] || [])
         .push({ n: r.full_name, p: r.position, e: r.report_status, l: r.report_primary_injury });
       if ((r.report_status !== 'Out' && r.report_status !== 'Doubtful') || NO_CUENTA.includes(r.position)) return;
@@ -103,7 +104,7 @@ async function guardarJugadores(ultima, datos) {
   // Solo las tres últimas jornadas con parte: es lo que la página puede necesitar mostrar.
   const semanas = Object.keys(parte).map(Number).sort((x, y) => y - x).slice(0, 3), reciente = {};
   semanas.forEach(s => { reciente[s] = parte[s]; });
-  fs.writeFileSync(path.join(datos, 'lesiones.json'), JSON.stringify({ temporada: ultima, semanas: reciente }));
+  fs.writeFileSync(path.join(datos, 'lesiones.json'), JSON.stringify({ temporada: ultima, semanas: reciente, modificado: modificado, bajado: new Date().toISOString() }));
   await guardarJugadores(ultima, datos);
   const jugados = filas.filter(f => f.home_score !== '' && f.home_score !== 'NA');
   console.log(filas.length + ' partidos guardados; último jugado: ' + jugados[jugados.length - 1].game_id +

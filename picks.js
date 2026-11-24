@@ -214,6 +214,7 @@
             var uso = temp.reduce(function (a, g) { return a + g[HITOS[k].uso]; }, 0) / temp.length;
             if (uso < HITOS[k].usoMin) return;
             var rl = reales[k], q = 0.5 + (M.probAlMenos(j.pr[k].m, j.pr[k].sd, Math.floor(rl.l) + 1) - 0.5) * CALIBRA_JUGADOR, arriba = q >= 0.5;
+            if (arriba && j.duda) return; // en duda: rinden por debajo de lo proyectado, no se apuesta a que superen la línea
             var logrados = j.previos.filter(function (g) { return arriba ? g[HITOS[k].col] > rl.l : g[HITOS[k].col] < rl.l; }).length;
             poner('jug', j.eq, j.j.n, (arriba ? 'más de ' : 'menos de ') + rl.l + ' ' + HITOS[k].nombre, Math.max(q, 1 - q), { m: 'yardas', id: j.j.id, est: k, linea: rl.l, mas: arriba },
               { duda: j.duda, cuotaReal: arriba ? rl.mas : rl.menos,
