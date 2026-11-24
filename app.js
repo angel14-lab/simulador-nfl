@@ -480,7 +480,7 @@
     h += '<div class="dos"><div class="panel texto"><h3>Cómo funciona</h3><ol>' +
       '<li><b>Puntos esperados.</b> El modelo califica a cada equipo y a su quarterback con todos los partidos desde 2010, la eficiencia por jugada y el parte de lesiones. Esa expectativa se mezcla con la línea de las casas de apuestas, ' + pct(P.MEZCLA) + ' mercado y ' + pct(1 - P.MEZCLA) + ' modelo: es la mezcla que mejor predijo en 2016-2021, y se confirmó en 2022-2025.</li>' +
       '<li><b>Simulación.</b> Cada partido se juega ' + SIMS.toLocaleString('es') + ' veces, serie ofensiva por serie: touchdowns, goles de campo, puntos extra, decisiones de final de partido y prórroga.</li>' +
-      '<li><b>Líneas de la casa.</b> El día de cada partido se bajan las líneas y cuotas reales de una casa grande (hándicaps y totales alternativos, ganador y yardas de jugadores). Los picks se eligen solo entre esas líneas: de cada mercado, la más probable que todavía paga al menos ' + P.CUOTA_MINIMA.toFixed(2) + '. Antes de ese día se muestran con líneas estimadas.</li>' +
+      '<li><b>Líneas de la casa.</b> El día de cada partido se bajan las líneas y cuotas reales de una casa grande (ganador, hándicaps y totales alternativos). Los picks se eligen solo entre esas líneas: de cada mercado, la más probable que todavía paga al menos ' + P.CUOTA_MINIMA.toFixed(2) + '. Antes de ese día se muestran con líneas estimadas.</li>' +
       '<li><b>Los de cada partido.</b> Solo picks de al menos ' + pct(P.MINIMO) + ' que paguen ' + P.CUOTA_MINIMA.toFixed(2) + ' o más, del más al menos probable, hasta 10. Cada uno lleva su razón: lo que dicen las simulaciones, el mercado y lo que llevan los equipos o el jugador este año.</li>' +
       '<li><b>Registro.</b> Quedan fijos 10 minutos antes del inicio. Ganador, hándicap y total se califican en cuanto hay marcador; touchdowns y jugadores, cuando salen las estadísticas oficiales.</li></ol></div>' +
       '<div class="panel texto"><h3>Qué se descartó y por qué</h3><ul>' +
@@ -488,6 +488,7 @@
       '<li>Picks de 58% a 65%: acertaban menos de lo que anunciaban.</li>' +
       '<li>Goles de campo: entre 55% y 69% según la época, demasiado inestable.</li>' +
       '<li>Anotador de touchdown y «menos de 1.5 pases de touchdown»: casi nunca pasan del 55%.</li>' +
+      '<li>Yardas de jugadores: sobre la línea real de la casa, en 6 211 casos de 2023-2025 los picks fuertes anunciaban 69% y acertaron 64%, peor en jugadores de poco uso. Retiradas.</li>' +
       '<li>Touchdowns del partido o de un equipo e hitos de yardas tipo «25+»: las casas solo ofrecen la línea principal, donde la probabilidad ronda el 50%, así que no hay pick que coincida con lo que se puede apostar.</li>' +
       '<li>Todos los «menos» (puntos del partido, touchdowns del partido y de un equipo): «menos de X puntos» es el mercado más flojo en todas las épocas (72% en 2016-2025, 70% en 2026, 5 de 9 en la semana 11) y desde 2024 los partidos terminan por encima del total de las casas el 52-54% de las veces. Un partido abierto los tumba todos a la vez.</li>' +
       '<li>El modelo no lee noticias. Lo que sabe el mercado (cambios de rol, clima, rumores) entra a través de su línea.</li>' +

@@ -191,7 +191,10 @@
        casas no suelen ofrecer. */
 
     // Jugadores: solo sobre la línea real de la casa, promediando el modelo con lo que dicen sus cuotas.
-    var hayReales = !!(ctx.lineas && ctx.lineas[p.id] && ctx.lineas[p.id].jug && Object.keys(ctx.lineas[p.id].jug).length);
+    /* Yardas de jugadores: retiradas de los picks. Sobre líneas parecidas a las de una casa (la mediana de
+       sus últimos partidos), en 6 211 casos de 2023-2025 los picks fuertes anunciaban 69% y acertaron 64%,
+       peor aún en jugadores de poco uso (caso Van Jefferson, semana 11). */
+    var hayReales = false && !!(ctx.lineas && ctx.lineas[p.id] && ctx.lineas[p.id].jug && Object.keys(ctx.lineas[p.id].jug).length);
     var casa = hayReales ? ctx.lineas[p.id].casaJugadores || 'la casa' : '';
     if (hayReales) [['v', p.visita], ['l', p.local]].forEach(function (x) {
       jugadoresDe(ctx, p, x[0], reconstruir).forEach(function (j) {
