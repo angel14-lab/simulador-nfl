@@ -92,7 +92,8 @@
      información que el modelo no tiene (rol del jugador, plan de juego, noticias), así que no se usa
      el modelo solo: se promedia con la probabilidad que implican las cuotas, quitándoles el margen. */
   function probConCasa(pr, k, real) {
-    var modelo = probJugador(pr, k, Math.floor(real.l) + 1), casa = null;
+    // Modelo calibrado (como con la línea estimada) y probabilidad de la casa sin su margen.
+    var modelo = 0.5 + (M.probAlMenos(pr[k].m, pr[k].sd, Math.floor(real.l) + 1) - 0.5) * CALIBRA_JUGADOR, casa = null;
     if (real.mas > 1 && real.menos > 1) casa = (1 / real.mas) / (1 / real.mas + 1 / real.menos);
     return { mas: casa == null ? modelo : (modelo + casa) / 2, modelo: modelo, casa: casa };
   }
@@ -203,8 +204,11 @@
          jugó el 93%; en duda, 47-81%; sin estado pero sin entrenar por lesión, 33%; dudoso o fuera, 0-8%.
          Por eso no reciben pick los que están en duda, dudosos, fuera o sin entrenar por lesión.
        · Rol fijo: 3 de los 4 últimos partidos del equipo y 25 pases, 10 acarreos o 4 objetivos por partido.
-       · Probabilidad calibrada (factor 0.7, ajustado con 2023-2024): con esa línea estimada, los de 65% o
-         más acertaron 70.3% en 2023-2024 y 69.2% en 2025, que no se usó para ajustar. */
+       · Probabilidad: el modelo calibrado (factor CALIBRA_JUGADOR). Esa calibración se validó contra una
+         línea ESTIMADA (la mediana de sus últimos 10 partidos), no contra la de la casa. Con la línea real de
+         la casa el modelo resultó sobreconfiado: 87 picks congelados de las semanas 10-11 anunciaban 56% y
+         acertaron 42.5%, menos que lo que implicaba la casa (~51%). Por eso, con línea real, la probabilidad
+         es el promedio del modelo calibrado y la de la casa sin margen; si no llega al mínimo, no hay pick. */
     var R2 = ctx.lineas && ctx.lineas[p.id], conLineas = !!(R2 && R2.confirmado && R2.jug);
     if (!p.jugado || reconstruir) {
       var hora = conLineas ? new Date(R2.confirmado) : null, antes = hora ? Math.round(((inicio(p) || hora) - hora) / 60000) : 0;
@@ -225,7 +229,8 @@
             var linea, cuotas = null;
             if (conLineas) { linea = reales[k].l; cuotas = reales[k]; }
             else { var ys = j.previos.map(function (g) { return g[HITOS[k].col]; }).sort(function (a, b) { return a - b; }); linea = Math.floor(ys[Math.floor(ys.length / 2)]) + 0.5; }
-            var q = 0.5 + (M.probAlMenos(j.pr[k].m, j.pr[k].sd, Math.floor(linea) + 1) - 0.5) * CALIBRA_JUGADOR, arriba = q >= 0.5;
+            // Con línea real: promedio del modelo calibrado y la casa sin margen. Sin ella: solo el modelo calibrado.
+            var q = conLineas ? probConCasa(j.pr, k, cuotas).mas : 0.5 + (M.probAlMenos(j.pr[k].m, j.pr[k].sd, Math.floor(linea) + 1) - 0.5) * CALIBRA_JUGADOR, arriba = q >= 0.5;
             var logrados = j.previos.filter(function (g) { return arriba ? g[HITOS[k].col] > linea : g[HITOS[k].col] < linea; }).length;
             var dispo = j.entreno ? ENTRENO[j.entreno] || 'sin restricciones en el parte' : 'no figura en el parte de lesiones';
             poner('jug', j.eq, j.j.n, (arriba ? 'más de ' : 'menos de ') + linea + ' ' + HITOS[k].nombre, Math.max(q, 1 - q), { m: 'yardas', id: j.j.id, est: k, linea: linea, mas: arriba },
