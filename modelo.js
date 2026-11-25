@@ -83,6 +83,7 @@
         bajoTecho: f.roof === 'dome' || f.roof === 'closed', techo: f.roof || '',
         epaVisita: num(x.away_epa), epaLocal: num(x.home_epa),
         tdVisita: num(x.away_td), tdLocal: num(x.home_td), golesCampo: num(x.fg),
+        mitadVisita: num(x.away_h1), mitadLocal: num(x.home_h1), // marcador al descanso
         bajasVisita: bajas(x.away_bajas), bajasLocal: bajas(x.home_bajas),
         estadio: f.stadium || '', prorroga: f.overtime === '1'
       });
@@ -217,6 +218,9 @@
   function simular(espL, espV, n, semilla, eliminatoria) {
     var r = azar(semilla || 1), prL = probsSerie(espL), prV = probsSerie(espV);
     var L = new Int16Array(n), V = new Int16Array(n), tdL = new Int8Array(n), tdV = new Int8Array(n), gc = new Int8Array(n), pr = new Int8Array(n);
+    // Primera mitad (marcador tras la mitad de las series) y quién anota primero (1 local, 2 visita).
+    // La moneda de quién recibe usa otro generador para no alterar el resto de la simulación.
+    var h1L = new Int16Array(n), h1V = new Int16Array(n), pri = new Int8Array(n), moneda = azar((semilla || 1) ^ 0x5bd1e995), mitad;
     var ganaL = 0, ganaV = 0, empates = 0, prorrogas = 0, sumaL = 0, sumaV = 0, i, s, k, a, b, x, ta, tb, g;
     // Anota la serie en el marcador y en las cuentas de touchdowns y goles de campo.
     function sumar(x, esLocal) {
@@ -226,11 +230,20 @@
     for (i = 0; i < n; i++) {
       s = SIM.series[(r() * SIM.series.length) | 0]; a = 0; b = 0; ta = 0; tb = 0; g = 0;
       var cierraL = r() < 0.5; // quién tiene la última posesión del partido
+      mitad = Math.floor(s / 2) + (s % 2 && moneda() < 0.5 ? 1 : 0); // con series impares, la de más cae en una u otra mitad
       for (k = 0; k < s; k++) {
-        if (k < s - 1) { sumar(serie(r, prL), true); sumar(serie(r, prV), false); continue; }
+        if (k === mitad) { h1L[i] = a; h1V[i] = b; }
+        if (k < s - 1) {
+          var antesL = a, antesV = b;
+          sumar(serie(r, prL), true); sumar(serie(r, prV), false);
+          if (!pri[i] && (a > antesL || b > antesV)) pri[i] = a > antesL && b > antesV ? (moneda() < 0.5 ? 1 : 2) : a > antesL ? 1 : 2;
+          continue;
+        }
+        if (!pri[i]) { var lA = a, lB = b; }
         // Última serie de cada equipo: se juega según el marcador, como en un partido real.
         if (cierraL) { sumar(final(r, prV, b - a, false), false); sumar(final(r, prL, a - b, true), true); }
         else { sumar(final(r, prL, a - b, false), true); sumar(final(r, prV, b - a, true), false); }
+        if (!pri[i] && (a > lA || b > lB)) pri[i] = a > lA && b > lB ? (cierraL ? 2 : 1) : a > lA ? 1 : 2;
       }
       if (a === b) {
         prorrogas++; pr[i] = 1;
@@ -248,11 +261,12 @@
           ronda++;
         }
       }
+      if (!pri[i] && (a || b)) pri[i] = a > 0 && b > 0 ? (moneda() < 0.5 ? 1 : 2) : a > 0 ? 1 : 2;
       L[i] = a; V[i] = b; tdL[i] = ta; tdV[i] = tb; gc[i] = g; sumaL += a; sumaV += b;
       if (a > b) ganaL++; else if (b > a) ganaV++; else empates++;
     }
     return {
-      n: n, local: L, visita: V, tdLocal: tdL, tdVisita: tdV, golesCampo: gc, huboProrroga: pr,
+      n: n, local: L, visita: V, tdLocal: tdL, tdVisita: tdV, golesCampo: gc, huboProrroga: pr, mitadLocal: h1L, mitadVisita: h1V, primero: pri,
       pLocal: ganaL / n, pVisita: ganaV / n, pEmpate: empates / n, pProrroga: prorrogas / n,
       mediaLocal: sumaL / n, mediaVisita: sumaV / n
     };

@@ -138,13 +138,15 @@
       if (p.temporada !== E.ultima || !p.jugado || p.fecha >= fecha || (p.local !== t && p.visita !== t)) return;
       var casa = p.local === t;
       g.push({ pf: casa ? p.ptsLocal : p.ptsVisita, pc: casa ? p.ptsVisita : p.ptsLocal, tf: casa ? p.tdLocal : p.tdVisita, tc: casa ? p.tdVisita : p.tdLocal, tot: p.ptsLocal + p.ptsVisita,
+        hf: casa ? p.mitadLocal : p.mitadVisita, hc: casa ? p.mitadVisita : p.mitadLocal, // primera mitad
         tdt: p.tdLocal != null && p.tdVisita != null ? p.tdLocal + p.tdVisita : null });
     });
     return g;
   }
   function media(g, f) { var v = g.map(f).filter(function (x) { return x != null; }); return v.length ? v.reduce(function (a, b) { return a + b; }, 0) / v.length : null; }
   function cuantos(g, f) { var v = g.filter(function (x) { return f(x) != null; }); return v.filter(function (x) { return f(x); }).length + ' de ' + v.length; }
-  var HISTORICO = { gana: 'Ganador', handicap: 'Hándicap alternativo', total: 'Total de puntos alternativo', tds: 'Touchdowns del partido', tdsEquipo: 'Touchdowns de un equipo' };
+  var HISTORICO = { gana: 'Ganador', handicap: 'Hándicap alternativo', total: 'Total de puntos alternativo', tds: 'Touchdowns del partido', tdsEquipo: 'Touchdowns de un equipo',
+    equipo: 'Puntos de un equipo', mitadGana: '1ª mitad: ganador', mitadHandicap: '1ª mitad: hándicap', mitadTotal: '1ª mitad: total' };
   /* Una línea con los datos que sostienen el pick: lo que dicen las simulaciones, el mercado y lo que
      llevan los equipos este año, más cuánto acertó ese tipo de pick en la prueba de 2016-2025. */
   function razon(k) {
@@ -174,6 +176,19 @@
       var a = media(g, function (y) { return y.tf; }), c = media(h, function (y) { return y.tc; });
       if (a != null) x.push(m.eq + ' anota ' + n1(a) + ' touchdowns por partido (más de ' + m.linea + ' en ' + cuantos(g, function (y) { return y.tf == null ? null : y.tf > m.linea; }) + ')');
       if (c != null) x.push(otro + ' permite ' + n1(c));
+    } else if (m.m === 'equipo') {
+      otro = m.eq === p.local ? p.visita : p.local; g = historialEquipo(m.eq, p.fecha); h = historialEquipo(otro, p.fecha);
+      x.push('pronóstico ' + n1(m.eq === p.local ? r.mL : r.mV) + ' puntos');
+      var pf = media(g, function (y) { return y.pf; }), pc = media(h, function (y) { return y.pc; });
+      if (pf != null) x.push(m.eq + ' anota ' + n1(pf) + ' por partido (más de ' + m.linea + ' en ' + cuantos(g, function (y) { return y.pf > m.linea; }) + ')');
+      if (pc != null) x.push(otro + ' permite ' + n1(pc));
+    } else if (m.m === 'mitadGana' || m.m === 'mitadHandicap' || m.m === 'mitadTotal') {
+      g = historialEquipo(p.visita, p.fecha); h = historialEquipo(p.local, p.fecha);
+      var hv = media(g, function (y) { return y.hf; }), hl = media(h, function (y) { return y.hf; }), cv = media(g, function (y) { return y.hc; }), cl = media(h, function (y) { return y.hc; });
+      if (m.m === 'mitadGana') x.push('gana la 1ª mitad en el ' + pct(k.prob) + ' de las simulaciones sin empate al descanso');
+      else if (m.m === 'mitadHandicap') x.push(m.linea > 0 ? 'pierde la 1ª mitad por más de ' + m.linea + ' solo en el ' + pct(1 - k.prob) + ' de las simulaciones' : 'gana la 1ª mitad por más de ' + Math.abs(m.linea) + ' en el ' + pct(k.prob));
+      else x.push('pronóstico ' + n1(r.mV + r.mL) + ' puntos en el partido; la 1ª mitad se lleva cerca de la mitad');
+      if (hv != null && hl != null) x.push('1ª mitad este año: ' + p.visita + ' anota ' + n1(hv) + ' y permite ' + n1(cv) + ', ' + p.local + ' anota ' + n1(hl) + ' y permite ' + n1(cl));
     }
     var v = E.valid && E.valid.tipos.filter(function (t) { return t.tipo === HISTORICO[m.m]; })[0];
     if (k.riesgo) x.push('histórico de los arriesgados: 58%');
@@ -194,7 +209,7 @@
       '<span class="pk-n">' + (i + 1) + '</span><span class="pk-p">' + pct(k.prob) + '</span>' +
       '<span class="pk-t">' + (k.eq ? chip(k.eq) + ' ' : '') + '<b>' + esc(k.quien) + '</b> ' + esc(k.que) + (k.duda ? ' <em>en duda</em>' : '') + (notas ? '<small>' + notas + '</small>' : '') + '</span>' +
       (k.cuotaReal ? '<span class="pk-c real">' + Number(k.cuotaReal).toFixed(2) + '<small>paga la casa · justa ' + cuota(k.prob) + (k.riesgo ? ' · ' + (k.prob * k.cuotaReal >= 1 ? 'con valor' : 'sin valor') : '') + '</small></span>' :
-        '<span class="pk-c">' + cuota(k.prob) + '<small>' + (k.estimada ? 'cuota justa · línea estimada' : 'cuota justa') + '</small></span>') + estadoPick(k) + '</li>';
+        '<span class="pk-c">' + cuota(k.prob) + '<small>' + (k.estimada || (k.linea && k.linea.estimada) ? 'cuota justa · línea estimada' : 'cuota justa') + '</small></span>') + estadoPick(k) + '</li>';
   }
 
   var globo = $('globo');
@@ -261,7 +276,7 @@
 
     if (r.top.length) {
       var aviso = !r.reg ? 'Calculados ahora: este partido todavía no tiene pronóstico guardado.' :
-        p.jugado ? (r.pend ? r.ok + ' aciertos, ' + r.mal + ' fallos y ' + r.pend + ' por calificar: los de touchdowns y jugadores esperan las estadísticas oficiales.' :
+        p.jugado ? (r.pend ? r.ok + ' aciertos, ' + r.mal + ' fallos y ' + r.pend + ' por calificar: los de touchdowns, primera mitad y jugadores esperan las estadísticas oficiales.' :
           r.ok + (r.ok === 1 ? ' acierto' : ' aciertos') + ' de ' + (r.ok + r.mal) + '. Picks guardados antes del inicio.') :
         emp ? 'Congelados antes del inicio; se califican al terminar.' : (E.reales[p.id] && E.reales[p.id].partido ? 'Líneas y cuotas de ' + esc(E.reales[p.id].casaLineas || E.reales[p.id].casa || 'la casa') + ', bajadas el ' + new Date(E.reales[p.id].actualizado).toLocaleString('es', { weekday: 'long', hour: '2-digit', minute: '2-digit' }) + '. ' + (E.reales[p.id].confirmado ? 'Líneas de jugadores del ' + new Date(E.reales[p.id].confirmado).toLocaleString('es', { weekday: 'long', hour: '2-digit', minute: '2-digit' }) + '.' : 'Jugadores con línea estimada: la línea real de la casa se baja en las 24 horas previas.') + ' Quedan fijos 10 minutos antes del inicio.' :
           'Líneas estimadas: las reales de la casa se bajan en las 24 horas previas (jugadores) y en las 4 previas (partido), y los picks se ajustan a ellas.') + ' Todo se revisa cada 20 minutos con el último parte de lesiones y entrenamientos: si un jugador deja de estar disponible, su pick se cae.';
@@ -446,7 +461,8 @@
   // ---------- vista: aciertos ----------
   function vistaAciertos() {
     var gan = { n: 0, neto: 0 }, ganArr = { n: 0, neto: 0 }, arr = { n: 0, ok: 0, p: 0 }, semanas = {}, total = { n: 0, ok: 0, p: 0 }, rehechos = { n: 0, ok: 0 }, mejor = { n: 0, ok: 0 }, porTipo = {}, pendientes = 0;
-    var NOM = { gana: 'Ganador', handicap: 'Hándicap', total: 'Total de puntos', tds: 'Touchdowns del partido', tdsEquipo: 'Touchdowns de un equipo', yardas: 'Yardas de jugador', tdPase: 'Pases de touchdown' };
+    var NOM = { gana: 'Ganador', handicap: 'Hándicap', total: 'Total de puntos', tds: 'Touchdowns del partido', tdsEquipo: 'Touchdowns de un equipo', yardas: 'Jugadores (yardas y recepciones)', tdPase: 'Pases de touchdown',
+      equipo: 'Puntos de un equipo', mitadGana: '1ª mitad: ganador', mitadHandicap: '1ª mitad: hándicap', mitadTotal: '1ª mitad: total' };
     Object.keys(E.hist).forEach(function (id) {
       var p = E.porId[id]; if (!p || !iniciado(p)) return;
       var r = pronostico(p), reg = r.reg, clave = reg.temporada * 100 + reg.semana;
@@ -536,26 +552,28 @@
         '<div class="panel"><h3>Picks mostrados, por tipo</h3><table><tr><th class="izq">Tipo</th><th>Picks</th><th>Acierto</th><th>Anunciaban</th></tr>' +
         v.tipos.map(function (t) { return '<tr><td class="izq">' + t.tipo + '</td><td>' + t.n.toLocaleString('es') + '</td><td><b>' + pct(t.acierto, 1) + '</b></td><td>' + pct(t.esperado, 1) + '</td></tr>'; }).join('') +
         '</table><h3 style="margin-top:20px">Por temporada</h3><div class="desborde"><table class="temporadas"><tr>' + v.temporadas.map(function (t) { return '<th>' + t.temporada + '</th>'; }).join('') + '</tr><tr>' + v.temporadas.map(function (t) { return '<td>' + pct(t.acierto) + '</td>'; }).join('') + '</tr></table></div>' +
-        '<p class="nota">Las yardas de jugadores se validan aparte: 75-78% en 2023-2026 con la regla de los últimos 10 partidos.</p></div></div>';
+        '<p class="nota">Los jugadores se validan aparte, con línea estimada (2023-2025): yardas 68.8% anunciando 68.8%; recepciones 71.7% anunciando 70.9%.</p></div></div>';
     }
     h += '<div class="dos"><div class="panel texto"><h3>Cómo funciona</h3><ol>' +
       '<li><b>Puntos esperados.</b> El modelo califica a cada equipo y a su quarterback con todos los partidos desde 2010, la eficiencia por jugada y el parte de lesiones. Pero para los picks se usan los puntos que implica la línea de las casas de apuestas: al elegir el peso solo con 2016-2022, la línea sola predijo mejor que cualquier mezcla con el modelo, y también fue la mejor en 2023-2025, que no se usaron para elegir. El modelo queda para cuando no hay línea y como referencia en el análisis.</li>' +
       '<li><b>Simulación.</b> Cada partido se juega ' + SIMS.toLocaleString('es') + ' veces, serie ofensiva por serie: touchdowns, goles de campo, puntos extra, decisiones de final de partido y prórroga.</li>' +
-      '<li><b>Líneas de la casa.</b> El día de cada partido se bajan las líneas y cuotas reales de una casa grande (ganador, hándicaps y totales alternativos; las yardas de jugadores, desde el día anterior). Los picks se eligen solo entre esas líneas: de cada mercado, la más probable que todavía paga al menos ' + P.CUOTA_MINIMA.toFixed(2) + '. Antes de ese día se muestran con líneas estimadas.</li>' +
-      '<li><b>Los de cada partido.</b> Solo picks de al menos ' + pct(P.MINIMO) + ' que paguen ' + P.CUOTA_MINIMA.toFixed(2) + ' o más, del más al menos probable, hasta 10. Cada uno lleva su razón: lo que dicen las simulaciones, el mercado y lo que llevan los equipos o el jugador este año.</li>' +
+      '<li><b>Líneas de la casa.</b> El día de cada partido se bajan las líneas y cuotas reales de una casa grande (ganador, hándicaps y totales alternativos; las yardas y recepciones de jugadores, desde el día anterior). Los picks se eligen solo entre esas líneas: de cada mercado, la más probable que todavía paga al menos ' + P.CUOTA_MINIMA.toFixed(2) + '. Antes de ese día se muestran con líneas estimadas.</li>' +
+      '<li><b>Los de cada partido.</b> Solo picks de al menos ' + pct(P.MINIMO) + ' que paguen ' + P.CUOTA_MINIMA.toFixed(2) + ' o más, del más al menos probable, hasta 10 y como mucho uno por mercado (el lado más probable). Cada uno lleva su razón: lo que dicen las simulaciones, el mercado y lo que llevan los equipos o el jugador este año.</li>' +
       '<li><b>Jugadores.</b> Se proponen con anticipación, con línea estimada (la mediana de sus últimos 10 partidos), y pasan a la línea real de la casa en las 24 horas previas; si la casa no ofrece al jugador, su pick se cae. Su probabilidad está calibrada, pero esa calibración (70% de acierto en los picks de 65% o más) se validó contra la línea estimada, no contra la de la casa. Contra la línea real el modelo resultó sobreconfiado: 87 picks congelados de las semanas 10 y 11 anunciaban 56% y acertaron 42.5%, menos de lo que implicaba la casa (~51%). Por eso, con línea real, la probabilidad es el promedio del modelo y la de la casa sin su margen, y si no llega al mínimo no hay pick. Disponibilidad: cada 20 minutos se revisa el último parte de lesiones y entrenamientos. En 2023-2025, entre jugadores con rol: sin estado y entrenando jugó el 93%; en duda, 47-81%; sin estado pero sin entrenar por lesión, 33%; dudoso o fuera, 0-8%. Por eso no reciben pick los que están en duda, dudosos, fuera o sin entrenar por lesión.</li>' +
       '<li><b>Información al día.</b> Cada 20 minutos se vuelven a bajar el parte oficial de lesiones, los quarterbacks anunciados y los marcadores. En las 4 horas previas al partido se toma la línea vigente de la casa, que ya recoge las noticias de última hora (lesiones, clima, cambios de titular), y con ella se recalcula todo. Si un jugador deja de estar disponible antes de que los picks queden fijos, su pick se cae.</li>' +
+      '<li><b>Mercados agregados en la segunda tanda.</b> Cada uno se calibró solo con 2016-2022 y entró porque en 2023-2025 acierta lo que anuncia: puntos de un equipo, más de X (74.0% anunciando 72.4%, 1 710 picks); touchdowns de un equipo, más de X (75.7% / 75.2%, 720); primera mitad: ganador (71.4% / 70.6%, 168; el empate anula), hándicap (73.6% / 72.6%, 1 700) y total, más de X (75.8% / 72.6%, 855); y recepciones de jugadores (71.7% / 70.9%, 1 778, línea estimada). Las líneas de equipo y de primera mitad son estimadas: con el plan gratuito de The Odds API no alcanzan los créditos para bajarlas, así que hay que buscar esa línea (o una más fácil) en la casa y comprobar que pague al menos ' + P.CUOTA_MINIMA.toFixed(2) + '. Las recepciones sí se bajan de la casa con las yardas.</li>' +
       '<li><b>Arriesgados.</b> Hasta 3 por partido, entre ' + pct(P.RIESGO_MIN) + ' y ' + pct(P.RIESGO_MAX) + ' y con cuota de ' + P.RIESGO_CUOTA.toFixed(2) + ' o más, en los mismos mercados. Con líneas reales se elige la que más devuelve (probabilidad × cuota). En 2016-2025 acertaron 58.2% anunciando 57.2% (8 250 picks), con cuota justa media de 1.75.</li>' +
-      '<li><b>Registro.</b> Quedan fijos 10 minutos antes del inicio. Ganador, hándicap y total se califican en cuanto hay marcador; touchdowns y jugadores, cuando salen las estadísticas oficiales.</li></ol></div>' +
+      '<li><b>Registro.</b> Quedan fijos 10 minutos antes del inicio. Ganador, hándicap y total se califican en cuanto hay marcador; touchdowns, primera mitad y jugadores, cuando salen las estadísticas oficiales.</li></ol></div>' +
       '<div class="panel texto"><h3>Qué se descartó y por qué</h3><ul>' +
       '<li>Picks contra la línea principal del mercado (hándicap, total o puntos de un equipo en la línea de la casa): acertaban entre 46% y 52%.</li>' +
       '<li>Picks de 58% a 65%: acertaban menos de lo que anunciaban.</li>' +
       '<li>Goles de campo: entre 55% y 69% según la época, demasiado inestable.</li>' +
       '<li>Anotador de touchdown y «menos de 1.5 pases de touchdown»: casi nunca pasan del 55%.</li>' +
-            '<li>Touchdowns del partido o de un equipo e hitos de yardas tipo «25+»: las casas solo ofrecen la línea principal, donde la probabilidad ronda el 50%, así que no hay pick que coincida con lo que se puede apostar.</li>' +
+            '<li>Touchdowns del partido e hitos de yardas tipo «25+»: las casas solo ofrecen la línea principal, donde la probabilidad ronda el 50%, así que no hay pick que coincida con lo que se puede apostar.</li>' +
       '<li>Todos los «menos» (puntos del partido, touchdowns del partido y de un equipo): «menos de X puntos» es el mercado más flojo en todas las épocas (72% en 2016-2025, 70% en 2026, 5 de 9 en la semana 11) y desde 2024 los partidos terminan por encima del total de las casas el 52-54% de las veces. Un partido abierto los tumba todos a la vez.</li>' +
       '<li>El modelo no lee noticias. Lo que sabe el mercado (cambios de rol, clima, rumores) entra a través de su línea.</li>' +
       '<li>También se probó exigir que el equipo ya viniera cumpliendo la línea en sus últimos partidos (como con los jugadores) y corregir el sesgo reciente de los totales: ninguna de las dos mejoró la prueba, así que no se aplican.</li>' +
+      '<li><b>Segunda tanda, probado y descartado</b> (cada factor se ajustó con 2016-2022 sobre lo que la línea del mercado no explica, y se midió en 2023-2025; entraba solo si bajaba el error y subía el acierto de los picks, que sin factores era 74.75%): lesiones contadas por posición (74.57%) y ponderadas por importancia, con la parte de yardas de cada jugador y el porcentaje de jugadas de linieros y defensas (74.53%, aunque bajó un poco el error); estilo y ritmo (el error no bajó); choque de eficiencias en carrera y pase (74.69%); calendario: semana corta, husos horarios y semana libre (el error subió); partido divisional (74.75%, igual); viento y frío (el error subió; la lluvia prevista no está en los datos históricos y no se puede validar); quarterback suplente o debutante (el error subió: la línea del mercado ya lo recoge, a los equipos con QB nuevo les va solo 0.4-0.7 puntos mejor que su línea). La línea de cierre ya incorpora todo eso. También se descartaron yardas por tierra del QB (21 picks tras calibrar; sin calibrar, 66.0% anunciando 69.6%) y equipo que anota primero (casi nunca llega al 65%, y en 2016-2022 acertó 66.4% anunciando 68.7%).</li>' +
       '<li>Ningún pick es seguro: un 75% falla una de cada cuatro veces, y los picks de un mismo partido suelen fallar juntos.</li></ul></div></div>';
     vista.innerHTML = h;
   }

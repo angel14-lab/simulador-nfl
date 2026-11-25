@@ -25,7 +25,7 @@ const publicadas = p => !!(jug && jug.temporada === p.temporada && [p.local, p.v
 const estadDe = p => id => {
   if (!publicadas(p)) return undefined;
   const g = porId[id] && porId[id].j.find(x => x[0] === p.temporada && x[1] === p.semana);
-  return g ? { td: g[8] + g[12], tdPase: g[5], pase: g[4], carrera: g[7], recepcion: g[11] } : null;
+  return g ? { td: g[8] + g[12], tdPase: g[5], pase: g[4], carrera: g[7], recepcion: g[11], atrapadas: g[10] } : null;
 };
 
 // Pronóstico de un partido: puntos esperados mezclando modelo y mercado, 100 000 simulaciones.

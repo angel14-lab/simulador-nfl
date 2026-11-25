@@ -1,10 +1,12 @@
 // Baja las líneas y cuotas reales de una casa de apuestas con The Odds API y guarda datos/lineas.json.
 // Necesita la clave en ODDS_API_KEY; sin ella no hace nada.
 //
-// Dos peticiones por partido, 3 créditos cada una (1 por mercado), unos 96 por semana:
-//   1. en las 4 horas previas: ganador, hándicaps alternativos y totales alternativos;
+// Dos peticiones por partido, 7 créditos en total (1 por mercado), unos 112 por semana y ~480 por mes:
+//   1. en las 4 horas previas: ganador, hándicaps alternativos y totales alternativos (3);
 //   2. en las 24 horas previas (ya publicado el parte final de lesiones, que sale el día anterior):
-//      yardas de pase, carrera y recepción.
+//      yardas de pase, carrera y recepción, y recepciones (4).
+// Los mercados de la segunda tanda (puntos y touchdowns de equipo, primera mitad) no se bajan: con el plan
+// gratuito de 500 créditos al mes no alcanza, así que se muestran con línea estimada.
 // La lista de partidos (/events) no gasta créditos.
 const fs = require('fs'), path = require('path');
 const P = require('../picks.js');
@@ -12,8 +14,8 @@ const CLAVE = process.env.ODDS_API_KEY, BASE = process.env.ODDS_API_BASE || 'htt
 const DEPORTE = '/v4/sports/americanfootball_nfl', archivo = path.join(__dirname, '../datos/lineas.json');
 const CASAS = ['betano', 'draftkings', 'fanduel', 'betmgm', 'williamhill_us', 'betrivers']; // orden de preferencia
 const PARTIDO = ['h2h', 'alternate_spreads', 'alternate_totals'];
-const JUGADOR = ['player_pass_yds', 'player_rush_yds', 'player_reception_yds'];
-const DE_JUGADOR = { player_pass_yds: 'pase', player_rush_yds: 'carrera', player_reception_yds: 'recepcion' };
+const JUGADOR = ['player_pass_yds', 'player_rush_yds', 'player_reception_yds', 'player_receptions'];
+const DE_JUGADOR = { player_pass_yds: 'pase', player_rush_yds: 'carrera', player_reception_yds: 'recepcion', player_receptions: 'atrapadas' };
 // Líneas de jugadores: en las 24 horas previas al inicio (CONF_DESDE en minutos).
 const CONF_DESDE = Number(process.env.CONF_DESDE || 24 * 60), CONF_HASTA = 10, MINUTO = 60 * 1000;
 const HORAS = Number(process.env.HORAS || 4), HORA = 3600 * 1000; // mercados del partido: en las 4 horas previas, con las noticias del día

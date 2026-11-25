@@ -25,12 +25,30 @@
   var CALIBRA_JUGADOR = 0.75; // ajustado solo con 2020-2022; en 2023-2025 los de 65%+ acertaron 68.8% anunciando 68.8% (línea estimada)
   var CUOTA_MINIMA = 1.25; // con cuota real de la casa, no se propone nada que pague menos
   var MAXIMO = 0.80;  // por encima de esto la cuota justa baja de 1.25 y el pick deja de interesar
+  var UNO_POR_MERCADO = typeof process !== 'undefined' && process.env && process.env.VARIOS_POR_MERCADO ? false : true;
   var RECIENTE = 0.70; // un hito de yardas solo se propone si el jugador lo logró en esta parte de sus últimos partidos
+  // Recepciones: factor propio, ajustado con 2020-2022 (herramientas/probar-mercados-jugador.js); en 2023-2025 los
+  // picks de 65-80% acertaron 71.7% anunciando 70.9% (1 778 picks, línea estimada).
+  var CALIBRA = { atrapadas: 0.85 };
+  function calibraJugador(k) { return CALIBRA[k] || CALIBRA_JUGADOR; }
+  /* Mercados de partido agregados en la segunda tanda (herramientas/probar-mercados.js). Calibración
+     q → 0.5 + a + (q − 0.5)·b, ajustada solo con 2016-2022. En 2023-2025 el pick que se mostraría
+     (la línea más exigente que se cumple el 70%, o el favorito si llega al 65%) acertó:
+       puntos de un equipo        1 710 picks · 74.0% anunciando 72.4%
+       touchdowns de un equipo      720 picks · 75.7% anunciando 75.2%
+       1ª mitad, ganador            168 picks · 71.4% anunciando 70.6% (el empate anula)
+       1ª mitad, hándicap         1 700 picks · 73.6% anunciando 72.6%
+       1ª mitad, total (más de)     855 picks · 75.8% anunciando 72.6%
+     Se descartaron yardas por tierra del QB (21 picks tras calibrar; sin calibrar 66.0% anunciando 69.6%) y
+     equipo que anota primero (22 picks; sin calibrar 68.3% anunciando 68.6%, y 66.4% anunciando 68.7% en 2016-2022). */
+  var CAL_MERCADO = { equipo: { a: 0.04, b: 0.9 }, tdsEquipo: { a: 0.03, b: 0.95 }, mitadGana: { a: -0.01, b: 1.05 }, mitadHandicap: { a: -0.01, b: 1 }, mitadTotal: { a: 0.02, b: 1 } };
+  function calMercado(k, q) { var c = CAL_MERCADO[k]; return Math.min(0.99, Math.max(0.01, 0.5 + c.a + (q - 0.5) * c.b)); }
   // Hitos de yardas que se proponen como pick, con la columna de los partidos del jugador donde está el dato real.
   var HITOS = {
     pase: { nombre: 'yardas de pase', col: 4, escala: [150, 175, 200, 225, 250, 275, 300], uso: 3, usoMin: 25, usoTexto: function (u) { return Math.round(u) + ' pases por partido'; } },
     carrera: { nombre: 'yardas por tierra', col: 7, escala: [25, 40, 50, 60, 75, 100], uso: 6, usoMin: 10, usoTexto: function (u) { return Math.round(u) + ' acarreos por partido'; } },
-    recepcion: { nombre: 'yardas de recepción', col: 11, escala: [25, 40, 50, 60, 75, 100], uso: 9, usoMin: 4, usoTexto: function (u) { return u.toFixed(1) + ' objetivos por partido'; } }
+    recepcion: { nombre: 'yardas de recepción', col: 11, escala: [25, 40, 50, 60, 75, 100], uso: 9, usoMin: 4, usoTexto: function (u) { return u.toFixed(1) + ' objetivos por partido'; } },
+    atrapadas: { nombre: 'recepciones', col: 10, uso: 9, usoMin: 4, usoTexto: function (u) { return u.toFixed(1) + ' objetivos por partido'; } }
   };
 
   // Nombre de jugador sin acentos, signos ni sufijos (Jr., III), para casar fuentes distintas.
@@ -96,7 +114,7 @@
      el modelo solo: se promedia con la probabilidad que implican las cuotas, quitándoles el margen. */
   function probConCasa(pr, k, real) {
     // Modelo calibrado (como con la línea estimada) y probabilidad de la casa sin su margen.
-    var modelo = 0.5 + (M.probAlMenos(pr[k].m, pr[k].sd, Math.floor(real.l) + 1) - 0.5) * CALIBRA_JUGADOR, casa = null;
+    var modelo = 0.5 + (M.probAlMenos(pr[k].m, pr[k].sd, Math.floor(real.l) + 1) - 0.5) * calibraJugador(k), casa = null;
     if (real.mas > 1 && real.menos > 1) casa = (1 / real.mas) / (1 / real.mas + 1 / real.menos);
     return { mas: casa == null ? modelo : (modelo + casa) / 2, modelo: modelo, casa: casa };
   }
@@ -127,6 +145,57 @@
     var a = lado === 'l' ? sim.local : sim.visita, c = 0, i;
     for (i = 0; i < sim.n; i++) if (a[i] > linea) c++;
     return c / sim.n;
+  }
+
+  /* Mercados de la segunda tanda (ver CAL_MERCADO): puntos y touchdowns de cada equipo con línea alternativa
+     y primera mitad (ganador, hándicap y total). Las líneas son estimadas: la más exigente de medio punto que,
+     calibrada, se cumple el 70% o más. No se bajan de la casa (cada mercado más cuesta créditos de The Odds API),
+     así que la cuota no se comprueba: el pick se marca como línea estimada. */
+  function mercadosNuevos(p, sim, poner) {
+    var est = { linea: { estimada: true } }, i;
+    // P(valor > l) para l = 0.5, 1.5, …, con un histograma de las simulaciones.
+    function escalera(valor) {
+      var cuenta = [], n = sim.n, x, r = [];
+      for (i = 0; i < n; i++) { x = Math.max(0, valor(i)); cuenta[x] = (cuenta[x] || 0) + 1; }
+      var resto = n;
+      for (x = 0; x < cuenta.length; x++) { resto -= cuenta[x] || 0; r.push({ l: x + 0.5, q: resto / n }); }
+      return r;
+    }
+    function masExigente(lista, clave) {
+      var mejor = null;
+      lista.forEach(function (c) { var q = calMercado(clave, c.q); if (q >= SEGURO) mejor = { l: c.l, q: q }; });
+      return mejor;
+    }
+    [[p.local, sim.local, sim.tdLocal], [p.visita, sim.visita, sim.tdVisita]].forEach(function (x) {
+      var pts = masExigente(escalera(function (k) { return x[1][k]; }), 'equipo');
+      if (pts) poner('equipo', x[0], 'Más de ' + pts.l, 'puntos del equipo', pts.q, { m: 'equipo', eq: x[0], linea: pts.l, mas: true, alt: true }, est);
+      var td = masExigente(escalera(function (k) { return x[2][k]; }), 'tdsEquipo');
+      if (td) poner('equipo', x[0], 'Más de ' + td.l, 'touchdowns del equipo', td.q, { m: 'tdsEquipo', eq: x[0], linea: td.l, mas: true }, est);
+    });
+    if (!sim.mitadLocal) return;
+    // Primera mitad: ganador (sin contar empates, que anulan la apuesta).
+    var gL = 0, gV = 0;
+    for (i = 0; i < sim.n; i++) { if (sim.mitadLocal[i] > sim.mitadVisita[i]) gL++; else if (sim.mitadLocal[i] < sim.mitadVisita[i]) gV++; }
+    if (gL + gV) {
+      var fav = gL >= gV ? p.local : p.visita, qg = calMercado('mitadGana', Math.max(gL, gV) / (gL + gV));
+      if (qg >= MINIMO) poner('mitad', fav, NOMBRES[fav] || fav, 'gana la 1ª mitad (empate: se anula)', qg, { m: 'mitadGana', eq: fav }, est);
+    }
+    // Hándicap de la primera mitad: para cada equipo, la línea más exigente que se cumple el 70%.
+    var dif = escalera(function (k) { return sim.mitadLocal[k] - sim.mitadVisita[k] + 60; }); // desplazado para que no haya negativos
+    [[p.local, 1], [p.visita, -1]].forEach(function (x) {
+      var mejor = null;
+      dif.forEach(function (c) {
+        // c.q = P(dif + 60 > c.l), con c.l de medio punto (sin empates): el local cubre h = 60 − c.l con c.q;
+        // la visita cubre h = c.l − 60 cuando dif < c.l − 60, con 1 − c.q.
+        var h = x[1] === 1 ? 60 - c.l : c.l - 60, q = x[1] === 1 ? c.q : 1 - c.q;
+        if (Math.abs(h) === 0.5 || Math.abs(h) > 20.5) return;
+        q = calMercado('mitadHandicap', q);
+        if (q >= SEGURO && (!mejor || h < mejor.h)) mejor = { h: h, q: q };
+      });
+      if (mejor) poner('mitad', x[0], textoHandicap(x[0], mejor.h), 'hándicap de la 1ª mitad', mejor.q, { m: 'mitadHandicap', eq: x[0], linea: mejor.h }, est);
+    });
+    var tot = masExigente(escalera(function (k) { return sim.mitadLocal[k] + sim.mitadVisita[k]; }), 'mitadTotal');
+    if (tot) poner('mitad', null, 'Más de ' + tot.l, 'puntos en la 1ª mitad', tot.q, { m: 'mitadTotal', mas: true, linea: tot.l }, est);
   }
 
   /* Los picks de un partido: solo mercados que la validación (herramientas/validar-picks.js, 2016-2025)
@@ -193,9 +262,10 @@
       for (i = -12; i <= 12; i++) { lt = Math.floor(centroT) + 0.5 + i; r = M.totales(sim, lt); if (r.mas >= SEGURO) masT = { l: lt, q: r.mas }; }
       if (masT) poner('total', null, 'Más de ' + masT.l, 'puntos en el partido', masT.q, { m: 'total', mas: true, linea: masT.l }, { linea: real });
     }
-    /* Ya no se proponen: touchdowns del partido y de un equipo (las casas solo ofrecen la línea principal,
-       donde la probabilidad ronda el 50%), ningún «menos» y los hitos propios de yardas («25+»), que las
-       casas no suelen ofrecer. */
+    /* Ya no se proponen: touchdowns del partido (las casas solo ofrecen la línea principal, donde la
+       probabilidad ronda el 50%), ningún «menos» y los hitos propios de yardas («25+»), que las casas no
+       suelen ofrecer. */
+    mercadosNuevos(p, sim, poner);
 
     // Jugadores: solo sobre la línea real de la casa, promediando el modelo con lo que dicen sus cuotas.
     /* Yardas de jugadores. Se proponen desde que el partido entra en la semana, con la información de ese
@@ -234,7 +304,7 @@
             if (conLineas) { linea = reales[k].l; cuotas = reales[k]; }
             else { var ys = j.previos.map(function (g) { return g[HITOS[k].col]; }).sort(function (a, b) { return a - b; }); linea = Math.floor(ys[Math.floor(ys.length / 2)]) + 0.5; }
             // Con línea real: promedio del modelo calibrado y la casa sin margen. Sin ella: solo el modelo calibrado.
-            var q = conLineas ? probConCasa(j.pr, k, cuotas).mas : 0.5 + (M.probAlMenos(j.pr[k].m, j.pr[k].sd, Math.floor(linea) + 1) - 0.5) * CALIBRA_JUGADOR, arriba = q >= 0.5;
+            var q = conLineas ? probConCasa(j.pr, k, cuotas).mas : 0.5 + (M.probAlMenos(j.pr[k].m, j.pr[k].sd, Math.floor(linea) + 1) - 0.5) * calibraJugador(k), arriba = q >= 0.5;
             var logrados = j.previos.filter(function (g) { return arriba ? g[HITOS[k].col] > linea : g[HITOS[k].col] < linea; }).length;
             var dispo = j.entreno ? ENTRENO[j.entreno] || 'sin restricciones en el parte' : 'no figura en el parte de lesiones';
             poner('jug', j.eq, j.j.n, (arriba ? 'más de ' : 'menos de ') + linea + ' ' + HITOS[k].nombre, Math.max(q, 1 - q), { m: 'yardas', id: j.j.id, est: k, linea: linea, mas: arriba },
@@ -283,7 +353,8 @@
     if (bt) c.push({ tipo: 'total', eq: null, quien: 'Más de ' + bt.linea, que: 'puntos en el partido', prob: bt.prob, m: { m: 'total', mas: true, linea: bt.linea }, cuotaReal: bt.cuota, linea: { estimada: !R } });
     c.forEach(function (k) { corregir(ctx, k); });
     c = c.filter(function (k) { return enRango(k.prob); });
-    (principales || []).forEach(function (k) { if (k.tipo === 'jug' && enRango(k.prob) && (!k.cuotaReal || k.cuotaReal >= RIESGO_CUOTA)) c.push(k); });
+    // Recepciones no: solo se validaron en 65-80% (segunda tanda), no como arriesgadas.
+    (principales || []).forEach(function (k) { if (k.tipo === 'jug' && k.m.est !== 'atrapadas' && enRango(k.prob) && (!k.cuotaReal || k.cuotaReal >= RIESGO_CUOTA)) c.push(k); });
     c.sort(function (a, b) { return a.cuotaReal && b.cuotaReal ? b.prob * b.cuotaReal - a.prob * a.cuotaReal : b.prob - a.prob; });
     // Como mucho 2 de jugadores: así queda al menos uno del partido, menos ligado a los demás.
     var jug = 0;
@@ -330,7 +401,7 @@
      (que incluían mercados hoy descartados). Acepta picks de la página {tipo, que, prob, m}. */
   function apto(k) {
     var m = k.m || {};
-    if (k.tipo === 'td' || m.m === 'td' || m.m === 'fg' || m.m === 'equipo') return false;
+    if (k.tipo === 'td' || m.m === 'td' || m.m === 'fg' || (m.m === 'equipo' && !m.alt)) return false; // puntos de equipo en la línea principal: retirados
     if (m.m === 'tdPase' && m.mas === false) return false;
     if ((m.m === 'tds' || m.m === 'tdsEquipo' || m.m === 'total') && m.mas === false) return false; // «menos»: retirados
     if (k.principal) return false; // hándicap o total en la línea principal del mercado (pronósticos antiguos)
@@ -338,8 +409,15 @@
     return k.prob >= MINIMO && k.prob <= MAXIMO;
   }
   // Los mejores picks de un partido: aptos, del más al menos probable, como máximo «n».
+  /* Como mucho un pick por mercado y partido (el lado más probable): dos hándicaps opuestos al 72% no son
+     dos apuestas distintas, y así quedan lugares para los jugadores. Cada jugador y estadística es su propio mercado. */
   function mejores(lista, n) {
-    return lista.filter(apto).sort(function (a, b) { return b.prob - a.prob; }).slice(0, n || CUANTOS);
+    var vistos = {};
+    return lista.filter(apto).sort(function (a, b) { return b.prob - a.prob; }).filter(function (k) {
+      var m = k.m || {}, clave = m.m === 'yardas' || m.m === 'tdPase' || m.m === 'td' ? m.m + '|' + m.id + '|' + (m.est || '') : m.m;
+      if (UNO_POR_MERCADO && vistos[clave]) return false;
+      vistos[clave] = 1; return true;
+    }).slice(0, n || CUANTOS);
   }
 
   /* Línea del mercado de un partido: la de una casa bajada con The Odds API si la hay (más reciente),
@@ -383,6 +461,13 @@
     if (m.m === 'tds') return p.tdLocal == null || p.tdVisita == null ? undefined : (p.tdLocal + p.tdVisita > m.linea) === m.mas;
     if (m.m === 'tdsEquipo') { x = m.eq === p.local ? p.tdLocal : p.tdVisita; return x == null ? undefined : (x > m.linea) === m.mas; }
     if (m.m === 'fg') return p.golesCampo == null ? undefined : (p.golesCampo > m.linea) === m.mas;
+    if (m.m === 'mitadGana' || m.m === 'mitadHandicap' || m.m === 'mitadTotal') {
+      if (p.mitadLocal == null || p.mitadVisita == null) return undefined; // marcador al descanso todavía sin publicar
+      x = p.mitadLocal - p.mitadVisita;
+      if (m.m === 'mitadGana') return x === 0 ? null : (x > 0 ? p.local : p.visita) === m.eq;
+      if (m.m === 'mitadHandicap') { x = (m.eq === p.local ? x : -x) + m.linea; return x === 0 ? null : x > 0; }
+      x = p.mitadLocal + p.mitadVisita - m.linea; return x === 0 ? null : (x > 0) === m.mas;
+    }
     e = estad(m.id);
     if (e === undefined) return undefined; // estadísticas de jugadores todavía sin publicar
     if (!e) return null;                   // publicadas, pero el jugador no jugó: se anula

@@ -2,14 +2,15 @@
 //   datos/partidos.csv  partidos + eficiencia por jugada (EPA) + descartados por lesión de cada equipo
 //   datos/lesiones.json parte de lesiones de las últimas jornadas, para mostrarlo en la página
 //   datos/jugadores.json últimos partidos de cada jugador de ataque, defensas rivales y estadísticas de equipo
+//   datos/mitades.csv   marcador al descanso de cada partido (de play-by-play), para calificar los picks de primera mitad
 // Uso: node actualizar-datos.js [carpeta con games.csv, st_AAAA.csv, inj_AAAA.csv y pl_AAAA.csv ya descargados]
-const fs = require('fs'), path = require('path');
+const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const M = require('../modelo.js');
 const PARTIDOS = 'https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv';
 const PUBLICADOS = 'https://github.com/nflverse/nflverse-data/releases/download/';
 const COLUMNAS = ['game_id', 'season', 'game_type', 'week', 'gameday', 'gametime', 'away_team', 'away_score', 'home_team', 'home_score',
   'location', 'overtime', 'away_moneyline', 'home_moneyline', 'spread_line', 'total_line', 'away_qb_name', 'home_qb_name', 'stadium',
-  'away_qb_id', 'home_qb_id', 'away_rest', 'home_rest', 'roof', 'away_epa', 'home_epa', 'away_bajas', 'home_bajas', 'away_td', 'home_td', 'fg'];
+  'away_qb_id', 'home_qb_id', 'away_rest', 'home_rest', 'roof', 'away_epa', 'home_epa', 'away_bajas', 'home_bajas', 'away_td', 'home_td', 'fg', 'away_h1', 'home_h1'];
 const DESDE = 2010, carpeta = process.argv[2];
 const ATAQUE = ['WR', 'RB', 'TE'], LINEA = ['T', 'G', 'C', 'OT', 'OG', 'OL'], NO_CUENTA = ['QB', 'K', 'P', 'LS', 'FB'];
 const alias = t => M.ALIAS[t] || t;
@@ -65,6 +66,40 @@ async function guardarJugadores(ultima, datos) {
   console.log(jugadores.length + ' jugadores guardados');
 }
 
+/* Marcador al descanso. Lo de temporadas pasadas ya está en datos/mitades.csv; si a algún partido jugado le
+   falta, se baja el play-by-play de esa temporada y se toma el mayor marcador de cada equipo en los cuartos 1 y 2. */
+function partirCSV(linea) {
+  const r = []; let c = '', q = false;
+  for (let i = 0; i < linea.length; i++) {
+    const ch = linea[i];
+    if (q) { if (ch === '"') { if (linea[i + 1] === '"') { c += '"'; i++; } else q = false; } else c += ch; }
+    else if (ch === '"') q = true; else if (ch === ',') { r.push(c); c = ''; } else c += ch;
+  }
+  r.push(c); return r;
+}
+async function mitades(filas, datos) {
+  const archivo = path.join(datos, 'mitades.csv'), h1 = {};
+  if (fs.existsSync(archivo)) M.leerCSV(fs.readFileSync(archivo, 'utf8')).forEach(r => { h1[r.game_id] = [r.away_h1, r.home_h1]; });
+  const faltan = [...new Set(filas.filter(f => Number(f.season) >= 2016 && f.home_score !== '' && f.home_score !== 'NA' && !h1[f.game_id]).map(f => Number(f.season)))];
+  for (const a of faltan) {
+    try {
+      const gz = carpeta ? fs.readFileSync(path.join(carpeta, `pbp_${a}.csv.gz`)) : Buffer.from(await (await fetch(`${PUBLICADOS}pbp/play_by_play_${a}.csv.gz`)).arrayBuffer());
+      const lineas = zlib.gunzipSync(gz).toString('utf8').split('\n'), cab = partirCSV(lineas[0]);
+      const ix = k => cab.indexOf(k), id = ix('game_id'), qt = ix('qtr'), hs = ix('total_home_score'), as = ix('total_away_score'), nuevo = {};
+      for (let i = 1; i < lineas.length; i++) {
+        if (!lineas[i]) continue;
+        const f = partirCSV(lineas[i]), q = Number(f[qt]), h = Number(f[hs]), v = Number(f[as]);
+        if (!f[id] || q > 2 || isNaN(h) || isNaN(v)) continue;
+        const g = nuevo[f[id]] = nuevo[f[id]] || [0, 0]; g[0] = Math.max(g[0], v); g[1] = Math.max(g[1], h);
+      }
+      // Solo partidos terminados (el play-by-play puede traer uno a medias).
+      filas.forEach(f => { if (Number(f.season) === a && f.home_score !== '' && f.home_score !== 'NA' && nuevo[f.game_id]) h1[f.game_id] = nuevo[f.game_id].map(String); });
+    } catch (e) { console.log('Sin play-by-play ' + a + ' (' + e.message + ')'); }
+  }
+  fs.writeFileSync(archivo, ['game_id,away_h1,home_h1'].concat(Object.keys(h1).sort().map(k => k + ',' + h1[k].join(','))).join('\n') + '\n');
+  return h1;
+}
+
 (async () => {
   const filas = M.leerCSV(await leer('games.csv', PARTIDOS)).filter(f => Number(f.season) >= DESDE);
   if (filas.length < 4000) throw new Error('games.csv incompleto');
@@ -95,7 +130,9 @@ async function guardarJugadores(ultima, datos) {
       b[ATAQUE.includes(r.position) ? 0 : LINEA.includes(r.position) ? 1 : 2]++;
     });
   }
+  const datos = path.join(__dirname, '../datos'), h1 = await mitades(filas, datos);
   filas.forEach(f => {
+    if (h1[f.game_id]) { f.away_h1 = h1[f.game_id][0]; f.home_h1 = h1[f.game_id][1]; }
     const cuenta = e => (bajas[f.season + '|' + Number(f.week) + '|' + alias(e)] || [0, 0, 0]).join('|');
     f.away_epa = epa[f.game_id + '|' + alias(f.away_team)] || ''; f.home_epa = epa[f.game_id + '|' + alias(f.home_team)] || '';
     f.away_bajas = cuenta(f.away_team); f.home_bajas = cuenta(f.home_team);
@@ -104,7 +141,6 @@ async function guardarJugadores(ultima, datos) {
   });
   const celda = v => /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
   const salida = [COLUMNAS.join(',')].concat(filas.map(f => COLUMNAS.map(c => celda(f[c] === 'NA' ? '' : f[c] || '')).join(','))).join('\n') + '\n';
-  const datos = path.join(__dirname, '../datos');
   fs.writeFileSync(path.join(datos, 'partidos.csv'), salida);
   // Solo las tres últimas jornadas con parte: es lo que la página puede necesitar mostrar.
   const semanas = Object.keys(parte).map(Number).sort((x, y) => y - x).slice(0, 3), reciente = {};

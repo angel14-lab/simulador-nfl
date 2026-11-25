@@ -10,7 +10,8 @@ const partidos = M.prepararPartidos(M.leerCSV(fs.readFileSync(path.join(__dirnam
 M.calificar(partidos);
 const ctx = { jug: null, porEquipo: {}, semanas: {}, lesiones: null, titular: {} };
 const MEZCLAS = (process.env.MEZCLAS || String(P.MEZCLA)).split(',').map(Number);
-const NOMBRE = { gana: 'Ganador', handicap: 'Hándicap alternativo', total: 'Total de puntos alternativo', tds: 'Touchdowns del partido', tdsEquipo: 'Touchdowns de un equipo' };
+const NOMBRE = { gana: 'Ganador', handicap: 'Hándicap alternativo', total: 'Total de puntos alternativo', tds: 'Touchdowns del partido', tdsEquipo: 'Touchdowns de un equipo',
+  equipo: 'Puntos de un equipo', mitadGana: '1ª mitad: ganador', mitadHandicap: '1ª mitad: hándicap', mitadTotal: '1ª mitad: total' };
 const juegos = partidos.filter(p => p.jugado && p.temporada >= desde && p.temporada <= hasta && p.linea != null && p.lineaTotal != null && p.tdLocal != null);
 const suma = (o, k, ok, q) => { const c = o[k] = o[k] || { n: 0, ok: 0, p: 0 }; c.n++; c.ok += ok ? 1 : 0; c.p += q; };
 let salida = null;
