@@ -6,6 +6,7 @@
   var SIMS = 100000;          // simulaciones por partido por jugar
   var SIMS_PASADO = 30000;    // partidos ya jugados de temporadas anteriores (solo se usa su probabilidad)
   var PRIMERA_TEMPORADA = 2016;
+  var SEGURO_MIN = 0.72;      // filtro «Seguros» de Mejores picks
 
   var EQ = {
     ARI: ['Arizona Cardinals', '#97233F'], ATL: ['Atlanta Falcons', '#A71930'], BAL: ['Baltimore Ravens', '#241773'], BUF: ['Buffalo Bills', '#00338D'],
@@ -421,14 +422,19 @@
     });
     riesgo.sort(function (a, b) { return b.prob - a.prob; });
     todos.sort(function (a, b) { return b.prob - a.prob; });
+    // Seguros: 72% o más, sin bajar la cuota mínima de 1.25 (con cuota real manda lo que paga la casa).
+    if (E.filtroPicks === 'seguros') todos = todos.filter(function (k) { return k.prob >= SEGURO_MIN && (k.cuotaReal ? k.cuotaReal >= P.CUOTA_MINIMA : k.prob <= P.MAXIMO); });
     var ver = todos.slice(0, 40);
-    vista.innerHTML = cabecera('Mejores picks') +
+    var filtro = '<div class="segmento filtro" role="group" aria-label="Filtro de picks">' + [['todos', 'Todos (' + pct(P.MINIMO) + '+)'], ['seguros', 'Seguros (' + pct(SEGURO_MIN) + '+)']].map(function (f) {
+      return '<button data-filtro="' + f[0] + '" aria-pressed="' + ((E.filtroPicks || 'todos') === f[0]) + '">' + f[1] + '</button>'; }).join('') + '</div>';
+    vista.innerHTML = cabecera('Mejores picks') + filtro +
       (ver.length ? '<div class="d-picks"><div class="panel"><h3>Más probables</h3><ol class="picks">' + ver.map(function (k, i) { return filaPick(k, i, true); }).join('') + '</ol></div>' +
         '<div class="panel riesgo"><h3>Arriesgados</h3><ol class="picks">' + riesgo.slice(0, 20).map(function (k, i) { return filaPick(k, i, true); }).join('') + '</ol>' +
         '<p class="nota">De ' + pct(P.RIESGO_MIN) + ' a ' + pct(P.RIESGO_MAX) + ' y pagan ' + P.RIESGO_CUOTA.toFixed(2) + ' o más. En 2016-2025 acertaron 58%.</p></div></div>' +
         '<p class="nota">Los ' + ver.length + ' más probables entre los partidos que faltan. Los picks de un mismo partido están relacionados: si el partido sale distinto de lo esperado, suelen fallar varios a la vez.</p>' :
-        '<p class="vacio">No quedan partidos por empezar en esta jornada.</p>');
+        '<p class="vacio">' + (E.filtroPicks === 'seguros' ? 'Ningún pick de los partidos que faltan llega al ' + pct(SEGURO_MIN) + ' con cuota de ' + P.CUOTA_MINIMA.toFixed(2) + ' o más.' : 'No quedan partidos por empezar en esta jornada.') + '</p>');
     activarCabecera();
+    vista.querySelectorAll('[data-filtro]').forEach(function (b) { b.onclick = function () { E.filtroPicks = b.getAttribute('data-filtro'); vistaPicks(); }; });
     vista.querySelectorAll('.pk[data-id]').forEach(function (li) {
       var abrir = function () { abrirPartido(E.porId[li.getAttribute('data-id')]); };
       li.onclick = abrir; li.onkeydown = function (ev) { if (ev.key === 'Enter') abrir(); };
