@@ -226,6 +226,44 @@
     }
     return lista.sort(function (a, b) { return b.prob - a.prob; });
   }
+  /* Picks arriesgados: más probables que no (55% a 65%) pero con mejor cuota (1.55 o más).
+     En la prueba de 2016-2025 (8 250 picks, ver herramientas/validar-riesgo.js) acertaron 58.2% anunciando
+     57.2%, con cuota justa media de 1.75; ninguna temporada bajó del 54.6%. Con líneas reales de la casa
+     se elige, en cada mercado, la línea que más devuelve (probabilidad × cuota); sin ellas, la línea más
+     exigente que todavía se cumple el 55% de las veces. «principales» = la lista de picks de picksDe,
+     de donde salen también los de jugadores confirmados. */
+  var RIESGO_MIN = 0.55, RIESGO_MAX = 0.65, RIESGO_CUOTA = 1.55, RIESGO_CUANTOS = 3;
+  function arriesgados(ctx, p, sim, esp, principales) {
+    var R = ctx.lineas && ctx.lineas[p.id] && ctx.lineas[p.id].partido && ctx.lineas[p.id].hs && Object.keys(ctx.lineas[p.id].hs).length ? ctx.lineas[p.id] : null;
+    var c = [], enRango = function (q) { return q >= RIESGO_MIN && q < RIESGO_MAX; };
+    function elegir(cands) { // con cuota real: la que más devuelve; sin ella: la más exigente
+      var ok = cands.filter(function (x) { return enRango(x.prob) && (!x.cuota || x.cuota >= RIESGO_CUOTA); });
+      ok.sort(function (a, b) { return a.cuota && b.cuota ? b.prob * b.cuota - a.prob * a.cuota : a.prob - b.prob; });
+      return ok[0] || null;
+    }
+    var ef = sim.pLocal >= sim.pVisita ? p.local : p.visita, pg = Math.max(sim.pLocal, sim.pVisita), cg = R && R.ml[ef];
+    if (enRango(pg) && (!cg || cg >= RIESGO_CUOTA)) c.push({ tipo: 'partido', eq: ef, quien: NOMBRES[ef] || ef, que: 'gana el partido', prob: pg, m: { m: 'gana', eq: ef }, cuotaReal: cg || null });
+    [p.local, p.visita].forEach(function (eq) {
+      var lineas = R ? Object.keys(R.hs[eq] || {}).map(Number) : [], cands = [], h;
+      if (!R) for (h = -20.5; h <= 20.5; h += 1) lineas.push(h);
+      lineas.forEach(function (h) {
+        if (Math.abs(h) === 0.5) return;
+        var x = M.cubrir(sim, eq === p.local ? h : -h);
+        cands.push({ linea: h, prob: (eq === p.local ? x.local : x.visita) / (1 - x.nulo || 1), cuota: R ? R.hs[eq][h] : null });
+      });
+      var b = elegir(cands);
+      if (b) c.push({ tipo: 'partido', eq: eq, quien: textoHandicap(eq, b.linea), que: 'hándicap', prob: b.prob, m: { m: 'handicap', eq: eq, linea: b.linea }, cuotaReal: b.cuota, linea: { estimada: !R } });
+    });
+    var lt = R ? Object.keys(R.ts.mas || {}).map(Number) : [], ct = [], l;
+    if (!R) for (l = 25.5; l <= 65.5; l += 1) lt.push(l);
+    lt.forEach(function (l) { var t = M.totales(sim, l); ct.push({ linea: l, prob: t.mas / (1 - t.nulo || 1), cuota: R ? R.ts.mas[l] : null }); });
+    var bt = elegir(ct);
+    if (bt) c.push({ tipo: 'total', eq: null, quien: 'Más de ' + bt.linea, que: 'puntos en el partido', prob: bt.prob, m: { m: 'total', mas: true, linea: bt.linea }, cuotaReal: bt.cuota, linea: { estimada: !R } });
+    (principales || []).forEach(function (k) { if (k.tipo === 'jug' && enRango(k.prob) && k.cuotaReal >= RIESGO_CUOTA) c.push(k); });
+    c.sort(function (a, b) { return a.cuotaReal && b.cuotaReal ? b.prob * b.cuotaReal - a.prob * a.cuotaReal : b.prob - a.prob; });
+    return c.slice(0, RIESGO_CUANTOS);
+  }
+
   // Acerca una probabilidad al 50% un 10%: 76% pasa a 73%.
   function moderar(q) { return 0.5 + (q - 0.5) * 0.9; }
 
@@ -295,6 +333,6 @@
     return null;
   }
 
-  return { NOMBRES: NOMBRES, MARGEN_CONGELAR: MARGEN_CONGELAR, MINIMO: MINIMO, SEGURO: SEGURO, MAXIMO: MAXIMO, CUOTA_MINIMA: CUOTA_MINIMA, CUANTOS: CUANTOS, MEZCLA: MEZCLA, apto: apto, mejores: mejores, conLineas: conLineas, normalizar: normalizar, indexar: indexar, parte: parte, jugadoresDe: jugadoresDe, probJugador: probJugador,
+  return { NOMBRES: NOMBRES, MARGEN_CONGELAR: MARGEN_CONGELAR, MINIMO: MINIMO, SEGURO: SEGURO, MAXIMO: MAXIMO, arriesgados: arriesgados, RIESGO_MIN: RIESGO_MIN, RIESGO_MAX: RIESGO_MAX, RIESGO_CUOTA: RIESGO_CUOTA, CUOTA_MINIMA: CUOTA_MINIMA, CUANTOS: CUANTOS, MEZCLA: MEZCLA, apto: apto, mejores: mejores, conLineas: conLineas, normalizar: normalizar, indexar: indexar, parte: parte, jugadoresDe: jugadoresDe, probJugador: probJugador,
     lineaEquipo: lineaEquipo, masDe: masDe, masQue: masQue, CUENTAS: CUENTAS, lineaJusta: lineaJusta, mezclar: mezclar, probConCasa: probConCasa, picksDe: picksDe, inicio: inicio, calificar: calificar, textoHandicap: textoHandicap };
 });

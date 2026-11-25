@@ -31,21 +31,23 @@ const estadDe = p => id => {
 function pronosticar(p, ini, reconstruir) {
   const q = P.conLineas(p, lineas), esp = P.mezclar(p.pred, q.linea, q.lineaTotal, P.MEZCLA);
   const sim = M.simular(esp.local, esp.visita, SIMULACIONES, M.semillaDe(p.id), p.tipo !== 'REG');
-  const todos = P.picksDe(ctx, q, sim, esp, reconstruir), top = P.mejores(todos);
+  const todos = P.picksDe(ctx, q, sim, esp, reconstruir), top = P.mejores(todos), riesgo = P.arriesgados(ctx, q, sim, esp, todos);
+  const guardar = k => Object.assign({ t: k.tipo, eq: k.eq, q: k.quien, que: k.que, p: r3(k.prob), m: k.m }, k.resp ? { r: k.resp } : {}, k.cuotaReal ? { c: k.cuotaReal } : {}, k.linea && k.linea.estimada ? { est: 1 } : {});
   return {
     v: VERSION, temporada: p.temporada, semana: p.semana, visita: p.visita, local: p.local, inicio: new Date(ini).toISOString(),
     pV: r3(sim.pVisita), pL: r3(sim.pLocal), mV: Math.round(sim.mediaVisita * 10) / 10, mL: Math.round(sim.mediaLocal * 10) / 10,
     linea: q.linea, total: q.lineaTotal, simulaciones: SIMULACIONES, e: [esp.visita, esp.local], // con «e» y la semilla la página repite la misma simulación
-    picks: todos.map(k => Object.assign({ t: k.tipo, eq: k.eq, q: k.quien, que: k.que, p: r3(k.prob), m: k.m },
-      top.indexOf(k) >= 0 ? { top: 1 } : {}, k.resp ? { r: k.resp } : {}, k.cuotaReal ? { c: k.cuotaReal } : {}, k.linea && k.linea.estimada ? { est: 1 } : {}))
+    picks: todos.map(k => Object.assign(guardar(k), top.indexOf(k) >= 0 ? { top: 1 } : {})),
+    riesgo: riesgo.map(guardar)
   };
 }
 // Marca lo que ya se puede saber. Los picks sin «ok» siguen pendientes; ok = null es anulado.
 function calificar(reg, p) {
   const estad = estadDe(p);
-  reg.picks.forEach(k => { if (k.ok === undefined) { const r = P.calificar(k.m, p, estad); if (r !== undefined) k.ok = r; } });
+  const todos = reg.picks.concat(reg.riesgo || []);
+  todos.forEach(k => { if (k.ok === undefined) { const r = P.calificar(k.m, p, estad); if (r !== undefined) k.ok = r; } });
   reg.final = [p.ptsVisita, p.ptsLocal];
-  reg.calificado = reg.picks.every(k => k.ok !== undefined);
+  reg.calificado = todos.every(k => k.ok !== undefined);
   if (reg.calificado) completos++; else parciales++;
 }
 // Solo se reconstruyen jornadas recientes: las que aún tienen su parte de lesiones guardado.

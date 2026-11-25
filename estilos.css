@@ -147,7 +147,7 @@ tr[data-id] { cursor: pointer; } tr[data-id]:hover td { background: var(--panel-
 .forma .fG { background: var(--tinta); color: var(--panel); }
 
 /* Detalle de un partido */
-dialog { padding: 0; border: 0; border-radius: 10px; background: var(--fondo); color: var(--tinta); width: min(900px, 100vw - 24px); max-height: calc(100vh - 32px); }
+dialog { padding: 0; border: 0; border-radius: 10px; background: var(--fondo); color: var(--tinta); width: min(1060px, 100vw - 24px); max-height: calc(100vh - 32px); }
 dialog::backdrop { background: rgba(6, 9, 13, .6); }
 .d-barra { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 20px; background: var(--barra); color: var(--barra-t); }
 .d-barra h2 { font-size: 19px; }
@@ -192,3 +192,11 @@ svg { display: block; width: 100%; height: auto; } svg text { fill: var(--tinta-
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 .bajas-res { display: flex; flex-wrap: wrap; gap: 4px 18px; align-items: center; font-size: 13px; color: var(--tinta-2); background: var(--panel); border: 1px solid var(--linea); border-top: 0; padding: 8px 16px; margin: 0; }
 .bajas-res b { color: var(--mal); font-weight: 600; } .bajas-res small { flex-basis: 100%; color: var(--tinta-3); font-size: 12px; }
+.d-aviso { font-size: 13px; color: var(--tinta-2); margin-top: 14px; }
+.d-picks { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.d-picks .d-sec { margin-top: 10px; }
+.riesgo { border-top: 3px solid #d08a17; }
+.riesgo .pk { grid-template-columns: 18px 46px 1fr 86px; } .riesgo .pk .res { grid-column: 2 / -1; justify-self: start; }
+.riesgo .pk-p { font-size: 20px; }
+@media (max-width: 760px) { .d-picks { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .pk-c { max-width: 92px; } .pk-c small { font-size: 10px; } }

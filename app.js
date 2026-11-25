@@ -83,23 +83,28 @@
     if (E.cache[p.id]) return E.cache[p.id];
     var reg = E.hist[p.id], r;
     if (reg) {
-      var lista = reg.picks.map(function (k) {
+      var mapear = function (k) {
         var x = { estimada: !!k.est, tipo: k.t, eq: k.eq, quien: k.q, que: String(k.que).replace(' (línea alternativa)', '').replace('hándicap alternativo', 'hándicap'), prob: k.p, m: k.m, resp: k.r, cuotaReal: k.c, ok: k.ok, top: k.top,
           principal: !reg.v && (k.que === 'hándicap' || k.que === 'puntos en el partido') };
         // Partido terminado y aún sin calificar en el servidor: lo que ya se puede saber se califica aquí.
         if (x.ok === undefined && p.jugado) { var o = P.calificar(x.m, p, function () { return undefined; }); if (o !== undefined) x.ok = o; }
         return x;
-      });
+      };
+      var lista = reg.picks.map(mapear);
+      var riesgo = (reg.riesgo || []).map(mapear);
       var top = (reg.v ? lista.filter(function (k) { return k.top && P.apto(k); }) : P.mejores(lista)).sort(function (a, b) { return b.prob - a.prob; });
-      r = { pV: reg.pV, pL: reg.pL, mV: reg.mV, mL: reg.mL, top: top, reg: reg, linea: reg.v ? reg.linea : p.linea, total: reg.v ? reg.total : p.lineaTotal,
+      r = { pV: reg.pV, pL: reg.pL, mV: reg.mV, mL: reg.mL, top: top, riesgo: riesgo, reg: reg, linea: reg.v ? reg.linea : p.linea, total: reg.v ? reg.total : p.lineaTotal,
         esp: reg.e ? { visita: reg.e[0], local: reg.e[1] } : { visita: Math.max(3, p.pred.visita), local: Math.max(3, p.pred.local) } };
     } else {
       var q = P.conLineas(p, E.reales), esp = P.mezclar(p.pred, q.linea, q.lineaTotal, P.MEZCLA);
       var s = M.simular(esp.local, esp.visita, p.jugado ? SIMS_PASADO : SIMS, M.semillaDe(p.id), p.tipo !== 'REG');
-      r = { pV: s.pVisita, pL: s.pLocal, mV: s.mediaVisita, mL: s.mediaLocal, top: p.jugado ? [] : P.mejores(P.picksDe(E.ctx, q, s, esp)),
+      var todos = p.jugado ? [] : P.picksDe(E.ctx, q, s, esp);
+      r = { pV: s.pVisita, pL: s.pLocal, mV: s.mediaVisita, mL: s.mediaLocal, top: P.mejores(todos), riesgo: p.jugado ? [] : P.arriesgados(E.ctx, q, s, esp, todos),
         linea: q.linea, total: q.lineaTotal, esp: esp, sim: p.jugado ? null : s };
     }
-    r.top.forEach(function (k) { k.p = p; });
+    r.top.concat(r.riesgo).forEach(function (k) { k.p = p; });
+    r.rOk = r.riesgo.filter(function (k) { return k.ok === true; }).length;
+    r.rMal = r.riesgo.filter(function (k) { return k.ok === false; }).length;
     r.ok = r.top.filter(function (k) { return k.ok === true; }).length;
     r.mal = r.top.filter(function (k) { return k.ok === false; }).length;
     r.pend = r.top.filter(function (k) { return k.ok === undefined; }).length;
@@ -169,7 +174,8 @@
       if (c != null) x.push(otro + ' permite ' + n1(c));
     }
     var v = E.valid && E.valid.tipos.filter(function (t) { return t.tipo === HISTORICO[m.m]; })[0];
-    if (v) x.push('histórico de este tipo de pick: ' + pct(v.acierto));
+    if (k.riesgo) x.push('histórico de los arriesgados: 58%');
+    else if (v) x.push('histórico de este tipo de pick: ' + pct(v.acierto));
     return x.join(' · ');
   }
 
@@ -185,7 +191,7 @@
     return '<li class="pk' + (k.ok === true ? ' es-bien' : k.ok === false ? ' es-mal' : '') + '"' + (conPartido ? ' data-id="' + k.p.id + '" tabindex="0"' : '') + '>' +
       '<span class="pk-n">' + (i + 1) + '</span><span class="pk-p">' + pct(k.prob) + '</span>' +
       '<span class="pk-t">' + (k.eq ? chip(k.eq) + ' ' : '') + '<b>' + esc(k.quien) + '</b> ' + esc(k.que) + (k.duda ? ' <em>en duda</em>' : '') + (notas ? '<small>' + notas + '</small>' : '') + '</span>' +
-      (k.cuotaReal ? '<span class="pk-c real">' + Number(k.cuotaReal).toFixed(2) + '<small>paga la casa · justa ' + cuota(k.prob) + '</small></span>' :
+      (k.cuotaReal ? '<span class="pk-c real">' + Number(k.cuotaReal).toFixed(2) + '<small>paga la casa · justa ' + cuota(k.prob) + (k.riesgo ? ' · ' + (k.prob * k.cuotaReal >= 1 ? 'con valor' : 'sin valor') : '') + '</small></span>' :
         '<span class="pk-c">' + cuota(k.prob) + '<small>' + (k.estimada ? 'cuota justa · línea estimada' : 'cuota justa') + '</small></span>') + estadoPick(k) + '</li>';
   }
 
@@ -257,8 +263,9 @@
           r.ok + (r.ok === 1 ? ' acierto' : ' aciertos') + ' de ' + (r.ok + r.mal) + '. Picks guardados antes del inicio.') :
         emp ? 'Congelados antes del inicio; se califican al terminar.' : (E.reales[p.id] && E.reales[p.id].partido ? 'Líneas y cuotas de ' + esc(E.reales[p.id].casaLineas || E.reales[p.id].casa || 'la casa') + ', bajadas el ' + new Date(E.reales[p.id].actualizado).toLocaleString('es', { weekday: 'long', hour: '2-digit', minute: '2-digit' }) + '. ' + (E.reales[p.id].confirmado ? 'Jugadores confirmados ' + Math.round((P.inicio(p) - Date.parse(E.reales[p.id].confirmado)) / 60000) + ' min antes del inicio.' : 'Los picks de jugadores aparecen cuando se confirma quién juega, entre 100 y 10 minutos antes del inicio.') + ' Quedan fijos 10 minutos antes del inicio.' :
           'Líneas estimadas: las líneas y cuotas reales de la casa se bajan el día del partido y entonces los picks se ajustan a ellas.');
-      h += '<section class="d-sec"><div class="d-tit"><h3>Los ' + r.top.length + ' picks más probables</h3><p>' + aviso + (r.reg && r.reg.reconstruido ? ' Rehechos después del partido.' : '') + '</p></div>' +
-        '<ol class="picks">' + r.top.map(function (k, i) { return filaPick(k, i); }).join('') + '</ol></section>';
+      h += '<p class="d-aviso">' + aviso + (r.reg && r.reg.reconstruido ? ' Rehechos después del partido.' : '') + '</p><div class="d-picks">' +
+        '<section class="d-sec"><div class="d-tit"><h3>Los ' + r.top.length + ' picks más probables</h3><p>65% o más · pagan 1.25 o más</p></div>' +
+        '<ol class="picks">' + r.top.map(function (k, i) { return filaPick(k, i); }).join('') + '</ol></section>' + bloqueRiesgo(p, r) + '</div>';
     } else if (r.reg) {
       h += '<section class="d-sec"><p class="nota">Este partido se guardó con una versión anterior del modelo y ninguno de sus picks cumple la regla actual (entre ' + pct(P.MINIMO) + ' y ' + pct(P.MAXIMO) + ' en mercados validados).</p></section>';
     } else if (!p.jugado) {
@@ -279,6 +286,14 @@
     var d = $('dialogo');
     d.querySelector('.analisis').addEventListener('toggle', function () { if (this.open && !this.dataset.listo) { this.dataset.listo = '1'; graficos(p, r); } });
     d.showModal(); d.scrollTop = 0;
+  }
+  // Columna de picks arriesgados: más probables que no, con mejor cuota.
+  function bloqueRiesgo(p, r) {
+    if (!r.riesgo.length) return '<section class="d-sec riesgo"><div class="d-tit"><h3>Arriesgados</h3></div><p class="nota">Este partido no tiene picks entre ' + pct(P.RIESGO_MIN) + ' y ' + pct(P.RIESGO_MAX) + ' que paguen ' + P.RIESGO_CUOTA.toFixed(2) + ' o más.</p></section>';
+    r.riesgo.forEach(function (k) { k.riesgo = true; });
+    return '<section class="d-sec riesgo"><div class="d-tit"><h3>Arriesgados</h3><p>' + pct(P.RIESGO_MIN) + ' a ' + pct(P.RIESGO_MAX) + ' · pagan ' + P.RIESGO_CUOTA.toFixed(2) + ' o más</p></div>' +
+      '<ol class="picks">' + r.riesgo.map(function (k, i) { return filaPick(k, i); }).join('') + '</ol>' +
+      '<p class="nota">Más probables que no, pero fallan unas 4 de cada 10 veces. En 2016-2025 acertaron 58% (8 250 picks) con cuota justa media de 1.75. A la larga solo compensan si la casa paga más que la cuota justa.</p></section>';
   }
   // Descartados y dudosos del parte oficial, con la fecha del parte: lo primero que hay que mirar antes de apostar.
   function bajasResumen(p) {
@@ -381,7 +396,7 @@
           '<span class="j-p">' + pct(prob) + '</span>' + '<span class="j-s">' + (p.jugado ? pts : '') + '</span></span>';
       }
       var estado = p.jugado ? (r.top.length ? '<b>' + r.ok + ' de ' + (r.ok + r.mal) + '</b><span>' + (r.pend ? r.pend + ' por calificar' : 'aciertos') + '</span>' : '<span>Final</span>') :
-        emp ? '<b>En juego</b><span>picks fijos</span>' : (r.top.length ? '<b>' + r.top.length + ' picks</b><span>ver</span>' : '<span>ver</span>');
+        emp ? '<b>En juego</b><span>picks fijos</span>' : (r.top.length ? '<b>' + r.top.length + ' picks</b><span>' + (r.riesgo.length ? '+ ' + r.riesgo.length + ' arriesgados' : 'ver') + '</span>' : '<span>ver</span>');
       h += '<button class="juego" data-id="' + p.id + '">' +
         '<span class="j-hora">' + (p.jugado ? 'Final' : emp ? 'En juego' : (p.hora || '—')) + '<small>' + (p.neutral ? 'neutral' : p.jugado || emp ? '' : 'ET') + '</small></span>' +
         '<span class="j-equipos">' + eq(p.visita, 'v', r.pV, p.ptsVisita) + eq(p.local, 'l', r.pL, p.ptsLocal) + '</span>' +
@@ -413,13 +428,14 @@
 
   // ---------- vista: aciertos ----------
   function vistaAciertos() {
-    var semanas = {}, total = { n: 0, ok: 0, p: 0 }, rehechos = { n: 0, ok: 0 }, mejor = { n: 0, ok: 0 }, porTipo = {}, pendientes = 0;
+    var arr = { n: 0, ok: 0, p: 0 }, semanas = {}, total = { n: 0, ok: 0, p: 0 }, rehechos = { n: 0, ok: 0 }, mejor = { n: 0, ok: 0 }, porTipo = {}, pendientes = 0;
     var NOM = { gana: 'Ganador', handicap: 'Hándicap', total: 'Total de puntos', tds: 'Touchdowns del partido', tdsEquipo: 'Touchdowns de un equipo', yardas: 'Yardas de jugador', tdPase: 'Pases de touchdown' };
     Object.keys(E.hist).forEach(function (id) {
       var p = E.porId[id]; if (!p || !iniciado(p)) return;
       var r = pronostico(p), reg = r.reg, clave = reg.temporada * 100 + reg.semana;
       var s = semanas[clave] = semanas[clave] || { t: reg.temporada, sem: reg.semana, juegos: [], n: 0, ok: 0, p: 0 };
       s.juegos.push(p);
+      if (!reg.reconstruido) r.riesgo.forEach(function (k) { if (k.ok === true || k.ok === false) { arr.n++; arr.ok += k.ok ? 1 : 0; arr.p += k.prob; } });
       r.top.forEach(function (k, i) {
         if (k.ok === undefined) { pendientes++; return; }
         if (k.ok === null) return;
@@ -435,6 +451,7 @@
     var h = '<div class="cab-vista"><h1>Aciertos <span>picks guardados antes de cada partido</span></h1></div>' +
       '<div class="cifras">' + cifra('Picks acertados', total, total.ok + ' de ' + total.n + (total.n ? ' · anunciaban ' + pct(total.p / total.n) : '')) +
       cifra('Mejor pick de cada partido', mejor, mejor.ok + ' de ' + mejor.n) +
+      cifra('Arriesgados', arr, arr.n ? arr.ok + ' de ' + arr.n + ' · anunciaban ' + pct(arr.p / arr.n) : 'desde la semana 12') +
       (E.valid ? '<div class="cifra"><span>Misma regla, ' + E.valid.desde + '–' + E.valid.hasta + '</span><b>' + pct(E.valid.mostrados.acierto, 1) + '</b><small>' + E.valid.mostrados.n.toLocaleString('es') + ' picks de partido en ' + E.valid.partidos.toLocaleString('es') + ' partidos</small></div>' : '') + '</div>';
     h += '<div class="dos"><div class="panel"><h3>Por jornada</h3><table><tr><th class="izq">Jornada</th><th>Partidos</th><th>Picks</th><th>Acertados</th><th>Acierto</th><th>Anunciaban</th></tr>' +
       claves.filter(function (c) { return semanas[c].n; }).map(function (c) { var s = semanas[c]; return '<tr><td class="izq">Semana ' + s.sem + '</td><td>' + s.juegos.length + '</td><td>' + s.n + '</td><td>' + s.ok + '</td><td><b>' + pct(s.ok / s.n) + '</b></td><td>' + pct(s.p / s.n) + '</td></tr>'; }).join('') + '</table></div>' +
@@ -496,6 +513,7 @@
       '<li><b>Los de cada partido.</b> Solo picks de al menos ' + pct(P.MINIMO) + ' que paguen ' + P.CUOTA_MINIMA.toFixed(2) + ' o más, del más al menos probable, hasta 10. Cada uno lleva su razón: lo que dicen las simulaciones, el mercado y lo que llevan los equipos o el jugador este año.</li>' +
       '<li><b>Jugadores confirmados.</b> Sus líneas se bajan entre 100 y 10 minutos antes del inicio, ya publicados los inactivos: si la casa retiró la línea de un jugador, no juega y no hay pick. Además debe tener rol fijo (jugó 3 de los 4 últimos partidos y promedia 25 pases, 10 acarreos o 4 objetivos). Su probabilidad está calibrada: sin calibrar, el modelo exageraba unos 5 puntos; calibrada, los de 65% o más acertaron 70% en 2023-2024 y 69% en 2025.</li>' +
       '<li><b>Información al día.</b> Cada 20 minutos se vuelven a bajar el parte oficial de lesiones, los quarterbacks anunciados y los marcadores. En las 4 horas previas al partido se toma la línea vigente de la casa, que ya recoge las noticias de última hora (lesiones, clima, cambios de titular), y con ella se recalcula todo. Los jugadores «en duda» no reciben picks de «más de».</li>' +
+      '<li><b>Arriesgados.</b> Hasta 3 por partido, entre ' + pct(P.RIESGO_MIN) + ' y ' + pct(P.RIESGO_MAX) + ' y con cuota de ' + P.RIESGO_CUOTA.toFixed(2) + ' o más, en los mismos mercados. Con líneas reales se elige la que más devuelve (probabilidad × cuota). En 2016-2025 acertaron 58.2% anunciando 57.2% (8 250 picks), con cuota justa media de 1.75.</li>' +
       '<li><b>Registro.</b> Quedan fijos 10 minutos antes del inicio. Ganador, hándicap y total se califican en cuanto hay marcador; touchdowns y jugadores, cuando salen las estadísticas oficiales.</li></ol></div>' +
       '<div class="panel texto"><h3>Qué se descartó y por qué</h3><ul>' +
       '<li>Picks contra la línea principal del mercado (hándicap, total o puntos de un equipo en la línea de la casa): acertaban entre 46% y 52%.</li>' +
