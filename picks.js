@@ -145,7 +145,8 @@
     /* Si ya se bajaron las líneas reales de la casa (el día del partido), los picks se eligen solo entre
        las líneas que la casa ofrece y con su cuota: de cada mercado, la línea más probable que todavía
        paga al menos 1.25. Si aún no se bajaron, se estiman con líneas de medio punto y se marcan así. */
-    var R = ctx.lineas && ctx.lineas[p.id] && ctx.lineas[p.id].hs ? ctx.lineas[p.id] : null;
+    // Solo cuentan como líneas de la casa si de verdad se bajaron (la ficha puede existir vacía).
+    var R = ctx.lineas && ctx.lineas[p.id] && ctx.lineas[p.id].partido && ctx.lineas[p.id].hs && Object.keys(ctx.lineas[p.id].hs).length ? ctx.lineas[p.id] : null;
     function mejorReal(candidatos) { // [{linea, prob, cuota}] → la más probable que paga lo mínimo
       var ok = candidatos.filter(function (c) { return c.cuota >= CUOTA_MINIMA && c.prob >= MINIMO; });
       return ok.sort(function (a, b) { return b.prob - a.prob; })[0] || null;
