@@ -65,7 +65,8 @@
       E.partidos.forEach(function (p) { E.porId[p.id] = p; });
       E.estado = M.calificar(E.partidos);
       var ind = P.indexar(E.jug);
-      E.ctx = { jug: E.jug, porEquipo: ind.porEquipo, semanas: ind.semanas, lesiones: E.lesiones, titular: E.estado.titular, lineas: E.reales };
+      E.ctx = { jug: E.jug, porEquipo: ind.porEquipo, semanas: ind.semanas, lesiones: E.lesiones, titular: E.estado.titular, lineas: E.reales,
+        correccion: P.calcularCorreccion(E.hist) }; // la misma corrección que usa el registro automático
       var jugados = E.partidos.filter(function (p) { return p.jugado; }), ultimo = jugados[jugados.length - 1];
       E.ultima = E.partidos[E.partidos.length - 1].temporada;
       E.temporada = E.ultima;
@@ -436,14 +437,18 @@
 
   // ---------- vista: aciertos ----------
   function vistaAciertos() {
-    var arr = { n: 0, ok: 0, p: 0 }, semanas = {}, total = { n: 0, ok: 0, p: 0 }, rehechos = { n: 0, ok: 0 }, mejor = { n: 0, ok: 0 }, porTipo = {}, pendientes = 0;
+    var gan = { n: 0, neto: 0 }, ganArr = { n: 0, neto: 0 }, arr = { n: 0, ok: 0, p: 0 }, semanas = {}, total = { n: 0, ok: 0, p: 0 }, rehechos = { n: 0, ok: 0 }, mejor = { n: 0, ok: 0 }, porTipo = {}, pendientes = 0;
     var NOM = { gana: 'Ganador', handicap: 'Hándicap', total: 'Total de puntos', tds: 'Touchdowns del partido', tdsEquipo: 'Touchdowns de un equipo', yardas: 'Yardas de jugador', tdPase: 'Pases de touchdown' };
     Object.keys(E.hist).forEach(function (id) {
       var p = E.porId[id]; if (!p || !iniciado(p)) return;
       var r = pronostico(p), reg = r.reg, clave = reg.temporada * 100 + reg.semana;
       var s = semanas[clave] = semanas[clave] || { t: reg.temporada, sem: reg.semana, juegos: [], n: 0, ok: 0, p: 0 };
       s.juegos.push(p);
-      if (!reg.reconstruido) r.riesgo.forEach(function (k) { if (k.ok === true || k.ok === false) { arr.n++; arr.ok += k.ok ? 1 : 0; arr.p += k.prob; } });
+      if (!reg.reconstruido) r.riesgo.forEach(function (k) {
+        if (k.ok !== true && k.ok !== false) return;
+        arr.n++; arr.ok += k.ok ? 1 : 0; arr.p += k.prob;
+        if (k.cuotaReal) { ganArr.n++; ganArr.neto += k.ok ? k.cuotaReal - 1 : -1; }
+      });
       r.top.forEach(function (k, i) {
         if (k.ok === undefined) { pendientes++; return; }
         if (k.ok === null) return;
@@ -452,19 +457,30 @@
         s.n++; s.ok += k.ok ? 1 : 0; s.p += k.prob;
         var t = porTipo[k.m.m] = porTipo[k.m.m] || { n: 0, ok: 0, p: 0 }; t.n++; t.ok += k.ok ? 1 : 0; t.p += k.prob;
         if (i === 0) { mejor.n++; mejor.ok += k.ok ? 1 : 0; }
+        if (k.cuotaReal) { gan.n++; gan.neto += k.ok ? k.cuotaReal - 1 : -1; } // solo como dato: no se usa para elegir picks
       });
     });
+    // Lo que se habría ganado apostando 1 unidad a cada pick con cuota real de la casa. Solo informativo.
+    function ganancia(t, a, b) {
+      function txt(o) { return o.n ? (o.neto >= 0 ? '+' : '−') + Math.abs(o.neto / o.n).toFixed(2) : '—'; }
+      return '<div class="cifra"><span>' + t + '</span><b>' + txt(a) + '</b><small>' + a.n + ' picks con cuota real' + (b.n ? ' · arriesgados ' + txt(b) + ' en ' + b.n : '') + ' · solo como dato, no se usa para elegir picks</small></div>';
+    }
     function cifra(t, o, sub) { return '<div class="cifra"><span>' + t + '</span><b>' + (o.n ? pct(o.ok / o.n) : '—') + '</b><small>' + sub + '</small></div>'; }
     var claves = Object.keys(semanas).map(Number).sort(function (a, b) { return b - a; });
     var h = '<div class="cab-vista"><h1>Aciertos <span>picks guardados antes de cada partido</span></h1></div>' +
       '<div class="cifras">' + cifra('Picks acertados', total, total.ok + ' de ' + total.n + (total.n ? ' · anunciaban ' + pct(total.p / total.n) : '')) +
       cifra('Mejor pick de cada partido', mejor, mejor.ok + ' de ' + mejor.n) +
       cifra('Arriesgados', arr, arr.n ? arr.ok + ' de ' + arr.n + ' · anunciaban ' + pct(arr.p / arr.n) : 'desde la semana 12') +
+      ganancia('Ganancia por unidad, cuota real', gan, ganArr) +
       (E.valid ? '<div class="cifra"><span>Misma regla, ' + E.valid.desde + '–' + E.valid.hasta + '</span><b>' + pct(E.valid.mostrados.acierto, 1) + '</b><small>' + E.valid.mostrados.n.toLocaleString('es') + ' picks de partido en ' + E.valid.partidos.toLocaleString('es') + ' partidos</small></div>' : '') + '</div>';
     h += '<div class="dos"><div class="panel"><h3>Por jornada</h3><table><tr><th class="izq">Jornada</th><th>Partidos</th><th>Picks</th><th>Acertados</th><th>Acierto</th><th>Anunciaban</th></tr>' +
       claves.filter(function (c) { return semanas[c].n; }).map(function (c) { var s = semanas[c]; return '<tr><td class="izq">Semana ' + s.sem + '</td><td>' + s.juegos.length + '</td><td>' + s.n + '</td><td>' + s.ok + '</td><td><b>' + pct(s.ok / s.n) + '</b></td><td>' + pct(s.p / s.n) + '</td></tr>'; }).join('') + '</table></div>' +
-      '<div class="panel"><h3>Por tipo de pick</h3><table><tr><th class="izq">Tipo</th><th>Picks</th><th>Acierto</th><th>Anunciaban</th></tr>' +
-      Object.keys(porTipo).sort(function (a, b) { return porTipo[b].n - porTipo[a].n; }).map(function (t) { var o = porTipo[t]; return '<tr><td class="izq">' + (NOM[t] || t) + '</td><td>' + o.n + '</td><td><b>' + pct(o.ok / o.n) + '</b></td><td>' + pct(o.p / o.n) + '</td></tr>'; }).join('') + '</table></div></div>';
+      '<div class="panel"><h3>Por tipo de pick</h3><table><tr><th class="izq">Tipo</th><th>Picks</th><th>Acierto</th><th>Anunciaban</th><th class="izq">Corrección</th></tr>' +
+      Object.keys(porTipo).sort(function (a, b) { return porTipo[b].n - porTipo[a].n; }).map(function (t) {
+        var o = porTipo[t], c = E.ctx.correccion[t] || { n: 0 }, est = c.factor != null ? 'activa: se acercan al ' + pct(c.real) :
+          c.n >= P.MIN_CORRECCION ? 'no hace falta' : 'con ' + P.MIN_CORRECCION + ' picks (van ' + c.n + ')';
+        return '<tr><td class="izq">' + (NOM[t] || t) + '</td><td>' + o.n + '</td><td><b>' + pct(o.ok / o.n) + '</b></td><td>' + pct(o.p / o.n) + '</td><td class="izq"><small>' + est + '</small></td></tr>'; }).join('') +
+      '</table><p class="nota">Solo picks congelados y calificados, sin rehechos. Cuando un tipo llega a ' + P.MIN_CORRECCION + ' y acierta menos de lo que anuncia, sus probabilidades se acercan a lo que de verdad acierta; si así bajan del ' + pct(P.MINIMO) + ', dejan de mostrarse.</p></div></div>';
     claves.forEach(function (c, i) {
       var s = semanas[c];
       h += '<details class="panel semana"' + (i === 0 ? ' open' : '') + '><summary>Semana ' + s.sem + ' · ' + s.t + (s.n ? ' <span>' + s.ok + ' de ' + s.n + ' · ' + pct(s.ok / s.n) + '</span>' : '') + '</summary>' +

@@ -15,6 +15,7 @@ const estado = M.calificar(partidos), jug = leer('jugadores.json', null), indice
 const lineas = (leer('lineas.json', {}) || {}).partidos || {};
 const ctx = { jug, porEquipo: indice.porEquipo, semanas: indice.semanas, lesiones: leer('lesiones.json', null), titular: estado.titular, lineas };
 const historial = leer('historial.json', { partidos: {} }), ahora = Date.now();
+ctx.correccion = P.calcularCorreccion(historial.partidos); // corrección con el historial real (ver picks.js)
 const ultima = partidos[partidos.length - 1].temporada, r3 = x => Math.round(x * 1000) / 1000;
 let congelados = 0, completos = 0, parciales = 0, reconstruidos = 0;
 
@@ -32,7 +33,7 @@ function pronosticar(p, ini, reconstruir) {
   const q = P.conLineas(p, lineas), esp = P.mezclar(p.pred, q.linea, q.lineaTotal, P.MEZCLA);
   const sim = M.simular(esp.local, esp.visita, SIMULACIONES, M.semillaDe(p.id), p.tipo !== 'REG');
   const todos = P.picksDe(ctx, q, sim, esp, reconstruir), top = P.mejores(todos), riesgo = P.arriesgados(ctx, q, sim, esp, todos);
-  const guardar = k => Object.assign({ t: k.tipo, eq: k.eq, q: k.quien, que: k.que, p: r3(k.prob), m: k.m }, k.resp ? { r: k.resp } : {}, k.cuotaReal ? { c: k.cuotaReal } : {}, k.linea && k.linea.estimada ? { est: 1 } : {});
+  const guardar = k => Object.assign({ t: k.tipo, eq: k.eq, q: k.quien, que: k.que, p: r3(k.prob), m: k.m }, k.resp ? { r: k.resp } : {}, k.cuotaReal ? { c: k.cuotaReal } : {}, k.linea && k.linea.estimada ? { est: 1 } : {}, k.p0 != null ? { p0: r3(k.p0) } : {});
   return {
     v: VERSION, temporada: p.temporada, semana: p.semana, visita: p.visita, local: p.local, inicio: new Date(ini).toISOString(),
     pV: r3(sim.pVisita), pL: r3(sim.pLocal), mV: Math.round(sim.mediaVisita * 10) / 10, mL: Math.round(sim.mediaLocal * 10) / 10,
