@@ -1,9 +1,9 @@
 name: Líneas de casas de apuestas
 
 # Baja las líneas y cuotas reales (ganador, hándicaps y totales alternativos, yardas de jugadores)
-# con The Odds API: los del partido el mismo día, los de jugadores entre 100 y 10 minutos antes del
-# inicio (ya publicados los inactivos). Corre cada 20 minutos pero solo gasta créditos cuando a un
-# partido le toca una de esas dos bajadas. Necesita el secreto ODDS_API_KEY.
+# con The Odds API: los del partido en las 4 horas previas, los de jugadores en las 24 horas previas
+# (ya publicado el parte final de lesiones). Corre cada 20 minutos pero solo gasta créditos cuando a
+# un partido le toca una de esas dos bajadas. Necesita el secreto ODDS_API_KEY.
 on:
   schedule:
     - cron: '7,27,47 * * * *'

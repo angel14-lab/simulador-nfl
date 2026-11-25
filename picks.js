@@ -193,16 +193,22 @@
        casas no suelen ofrecer. */
 
     // Jugadores: solo sobre la línea real de la casa, promediando el modelo con lo que dicen sus cuotas.
-    /* Yardas de jugadores, solo si están confirmados: la casa todavía ofrece su línea en la bajada que se
-       hace entre 100 y 10 minutos antes del inicio, ya publicados los inactivos (si un jugador no juega,
-       la casa retira su línea). Además el jugador debe tener rol fijo: jugó 3 de los 4 últimos partidos
-       del equipo y promedia el uso mínimo (25 pases, 10 acarreos o 4 objetivos por partido).
+    /* Yardas de jugadores. Sus líneas se bajan en las 24 horas previas al inicio, cuando ya salió el parte
+       final de lesiones (el día anterior al partido). Solo reciben pick los jugadores que la casa ofrece y
+       que no figuran en el parte como fuera, dudosos ni en duda; como los picks se rehacen cada 20 minutos
+       con el parte actualizado, si alguien pasa a estar fuera antes de que queden fijos, su pick se cae.
+       Además el jugador debe tener rol fijo: jugó 3 de los 4 últimos partidos del equipo y promedia el
+       uso mínimo (25 pases, 10 acarreos o 4 objetivos por partido). Si el parte final del equipo aún no
+       está publicado en los datos, sus jugadores esperan.
        La probabilidad del modelo se calibra (factor 0.7, ajustado con 2023-2024): así, los picks de 65% o
        más acertaron 70.3% en 2023-2024 y 69.2% en 2025, que no se usó para ajustar. */
     var R2 = ctx.lineas && ctx.lineas[p.id];
     if (R2 && R2.confirmado && R2.jug) {
       var hora = new Date(R2.confirmado), antes = Math.round(((inicio(p) || hora) - hora) / 60000);
+      var parteSem = parte(ctx.lesiones, p);
       [['v', p.visita], ['l', p.local]].forEach(function (x) {
+        // Sin parte final del equipo (con estados de juego) todavía no hay picks de sus jugadores.
+        if (!parteSem || !parteSem[x[1]]) return;
         var semanasEq = Object.keys(ctx.semanas[x[1]] || {}).map(Number).filter(function (s) { return s < p.semana; }).sort(function (a, b) { return b - a; }).slice(0, 4);
         jugadoresDe(ctx, p, x[0], reconstruir).forEach(function (j) {
           var reales = R2.jug[normalizar(j.j.n)];
@@ -215,11 +221,11 @@
             var uso = temp.reduce(function (a, g) { return a + g[HITOS[k].uso]; }, 0) / temp.length;
             if (uso < HITOS[k].usoMin) return;
             var rl = reales[k], q = 0.5 + (M.probAlMenos(j.pr[k].m, j.pr[k].sd, Math.floor(rl.l) + 1) - 0.5) * CALIBRA_JUGADOR, arriba = q >= 0.5;
-            if (arriba && j.duda) return; // en duda: rinden por debajo de lo proyectado, no se apuesta a que superen la línea
+            if (j.duda) return; // en duda: puede no jugar y, si juega, rinde por debajo de lo proyectado
             var logrados = j.previos.filter(function (g) { return arriba ? g[HITOS[k].col] > rl.l : g[HITOS[k].col] < rl.l; }).length;
             poner('jug', j.eq, j.j.n, (arriba ? 'más de ' : 'menos de ') + rl.l + ' ' + HITOS[k].nombre, Math.max(q, 1 - q), { m: 'yardas', id: j.j.id, est: k, linea: rl.l, mas: arriba },
               { duda: j.duda, cuotaReal: arriba ? rl.mas : rl.menos,
-                resp: 'confirmado ' + antes + ' min antes del inicio · ' + HITOS[k].usoTexto(uso) + ' · jugó ' + jugo + ' de los 4 últimos · lo logró en ' + logrados + ' de sus últimos ' + j.previos.length });
+                resp: 'línea bajada ' + (antes >= 120 ? Math.round(antes / 60) + ' h' : antes + ' min') + ' antes del inicio · sin restricciones en el parte de lesiones · ' + HITOS[k].usoTexto(uso) + ' · jugó ' + jugo + ' de los 4 últimos · lo logró en ' + logrados + ' de sus últimos ' + j.previos.length });
           });
         });
       });

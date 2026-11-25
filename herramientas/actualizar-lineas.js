@@ -3,7 +3,8 @@
 //
 // Dos peticiones por partido, 3 créditos cada una (1 por mercado), unos 96 por semana:
 //   1. en las 4 horas previas: ganador, hándicaps alternativos y totales alternativos;
-//   2. entre 100 y 10 minutos antes del inicio: yardas de pase, carrera y recepción (confirma quién juega).
+//   2. en las 24 horas previas (ya publicado el parte final de lesiones, que sale el día anterior):
+//      yardas de pase, carrera y recepción.
 // La lista de partidos (/events) no gasta créditos.
 const fs = require('fs'), path = require('path');
 const P = require('../picks.js');
@@ -13,8 +14,8 @@ const CASAS = ['betano', 'draftkings', 'fanduel', 'betmgm', 'williamhill_us', 'b
 const PARTIDO = ['h2h', 'alternate_spreads', 'alternate_totals'];
 const JUGADOR = ['player_pass_yds', 'player_rush_yds', 'player_reception_yds'];
 const DE_JUGADOR = { player_pass_yds: 'pase', player_rush_yds: 'carrera', player_reception_yds: 'recepcion' };
-// Confirmación de jugadores: entre 100 y 10 minutos antes del inicio, ya publicados los inactivos.
-const CONF_DESDE = Number(process.env.CONF_DESDE || 100), CONF_HASTA = 10, MINUTO = 60 * 1000;
+// Líneas de jugadores: en las 24 horas previas al inicio (CONF_DESDE en minutos).
+const CONF_DESDE = Number(process.env.CONF_DESDE || 24 * 60), CONF_HASTA = 10, MINUTO = 60 * 1000;
 const HORAS = Number(process.env.HORAS || 4), HORA = 3600 * 1000; // mercados del partido: en las 4 horas previas, con las noticias del día
 if (!CLAVE) { console.log('Sin ODDS_API_KEY: no se bajan líneas.'); process.exit(0); }
 
@@ -88,5 +89,5 @@ const resultados = (casa, clave) => casa.markets.find(m => m.key === clave).outc
     final[p ? p.id : k] = r;
   });
   fs.writeFileSync(archivo, JSON.stringify({ actualizado: new Date().toISOString(), partidos: final }));
-  console.log(`Partidos con líneas: ${Object.keys(final).length} · mercados de partido bajados: ${bajados} · jugadores confirmados: ${confirmados} · ${creditos} créditos`);
+  console.log(`Partidos con líneas: ${Object.keys(final).length} · mercados de partido bajados: ${bajados} · líneas de jugadores bajadas: ${confirmados} · ${creditos} créditos`);
 })().catch(e => { console.error('No se pudieron bajar las líneas:', e.message); process.exit(1); });
