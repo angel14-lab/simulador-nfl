@@ -17,9 +17,12 @@
   var MARGEN_CONGELAR = 10 * 60 * 1000; // los picks dejan de moverse 10 minutos antes del inicio
   var MINIMO = 0.65;  // por debajo, la validación muestra picks que aciertan menos de lo que anuncian
   var CUANTOS = 10;   // picks que se muestran por partido
-  var MEZCLA = 0.85;  // peso de la línea del mercado al calcular los puntos esperados (validar-picks.js)
+  // Peso de la línea del mercado en los puntos esperados. Elegido solo con 2016-2022 (ajustar-fuera-de-muestra.js):
+  // la línea sola (1.0) fue la mejor en esos años y también en 2023-2025, que no se usaron para elegir.
+  // El modelo propio sigue calculándose y se usa cuando no hay línea del mercado.
+  var MEZCLA = 1;
   var SEGURO = 0.70;  // probabilidad que se busca al elegir una línea alternativa
-  var CALIBRA_JUGADOR = 0.7; // ver el comentario de los picks de jugadores
+  var CALIBRA_JUGADOR = 0.75; // ajustado solo con 2020-2022; en 2023-2025 los de 65%+ acertaron 68.8% anunciando 68.8% (línea estimada)
   var CUOTA_MINIMA = 1.25; // con cuota real de la casa, no se propone nada que pague menos
   var MAXIMO = 0.80;  // por encima de esto la cuota justa baja de 1.25 y el pick deja de interesar
   var RECIENTE = 0.70; // un hito de yardas solo se propone si el jugador lo logró en esta parte de sus últimos partidos
@@ -204,7 +207,8 @@
          jugó el 93%; en duda, 47-81%; sin estado pero sin entrenar por lesión, 33%; dudoso o fuera, 0-8%.
          Por eso no reciben pick los que están en duda, dudosos, fuera o sin entrenar por lesión.
        · Rol fijo: 3 de los 4 últimos partidos del equipo y 25 pases, 10 acarreos o 4 objetivos por partido.
-       · Probabilidad: el modelo calibrado (factor CALIBRA_JUGADOR). Esa calibración se validó contra una
+       · Probabilidad: el modelo calibrado (factor CALIBRA_JUGADOR, elegido con 2020-2022; en 2023-2025 los de
+         65% o más acertaron 68.8% anunciando 68.8%). Esa calibración se validó contra una
          línea ESTIMADA (la mediana de sus últimos 10 partidos), no contra la de la casa. Con la línea real de
          la casa el modelo resultó sobreconfiado: 87 picks congelados de las semanas 10-11 anunciaban 56% y
          acertaron 42.5%, menos que lo que implicaba la casa (~51%). Por eso, con línea real, la probabilidad

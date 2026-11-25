@@ -10,13 +10,28 @@ Sitio estático con los picks más probables de cada partido de la NFL: https://
 
 ## Cómo se calculan
 
-1. Puntos esperados de cada equipo: 85% línea del mercado y 15% modelo propio (equipos, quarterbacks, eficiencia y lesiones).
+1. Puntos esperados de cada equipo: los que implica la línea del mercado (hándicap y total). El modelo propio
+   (equipos, quarterbacks, eficiencia y lesiones) se usa solo si no hay línea.
 2. 100 000 simulaciones por partido, serie ofensiva por serie.
-3. Picks en mercados validados (ganador, hándicap y total alternativos, touchdowns del partido y de cada equipo, yardas
-   de jugadores y pases de touchdown), solo entre 65% y 80% de probabilidad. Se muestran los 10 mejores por partido.
+3. Picks en mercados validados: ganador, hándicap y «más de X puntos» con líneas alternativas, y yardas de jugadores
+   con rol fijo y sin restricciones en el parte de lesiones. Solo entre 65% y 80% (cuota de 1.25 o más), hasta 10 por partido.
+   Con líneas reales de la casa, los de jugadores promedian el modelo calibrado y la casa sin margen.
+4. Arriesgados aparte: de 55% a 65% y cuota de 1.55 o más, hasta 3 por partido.
 
-`node herramientas/validar-picks.js` repite la prueba con los partidos de 2016 a 2025 (74.5% de acierto en 20 823 picks)
-y guarda el resumen en `datos/validacion-picks.json`.
+## Validación, fuera de muestra
+
+Los parámetros se eligieron solo con 2016-2022 (`herramientas/ajustar-fuera-de-muestra.js`) y el acierto se mide en
+2023-2025, años que no se usaron para elegirlos.
+
+| Prueba | Picks | Acertaron | Anunciaban |
+|---|---|---|---|
+| Picks de partido mostrados, 2023-2025 (`validar-picks.js`) | 2 772 | 74.7% | 71.3% |
+| Yardas de jugador de 65% o más, 2023-2025, línea estimada (`calibrar-jugadores.js`) | 1 079 | 68.8% | 68.8% |
+| Arriesgados, 2016-2025 (`validar-riesgo.js`) | 8 250 | 58.2% | 57.2% |
+
+La prueba de jugadores usa como línea la mediana de sus últimos 10 partidos, no la de la casa: contra la línea real el
+modelo solo resultó sobreconfiado (87 picks de las semanas 10-11 anunciaban 56% y acertaron 42.5%), y por eso ahí se
+promedia con la casa. `datos/validacion-picks.json` guarda el resumen de la prueba de partido.
 
 ## Datos
 

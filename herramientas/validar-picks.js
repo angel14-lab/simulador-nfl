@@ -1,9 +1,11 @@
 // Prueba los picks de partido contra resultados reales y guarda el resumen en datos/validacion-picks.json.
 // Cada partido se predice solo con lo ocurrido antes; la línea del mercado es la de cierre.
+// Por defecto mide SOLO 2023-2025: los parámetros (MEZCLA, MINIMO, MAXIMO, PARAMS) se eligieron con
+// 2016-2022 (ajustar-fuera-de-muestra.js), así que este acierto es fuera de muestra.
 // Uso: node validar-picks.js [desde] [hasta] [simulaciones]     MEZCLAS=0,0.85,1 para comparar pesos
 const fs = require('fs'), path = require('path');
 const M = require('../modelo.js'), P = require('../picks.js');
-const desde = Number(process.argv[2]) || 2016, hasta = Number(process.argv[3]) || 2025, N = Number(process.argv[4]) || 4000;
+const desde = Number(process.argv[2]) || 2023, hasta = Number(process.argv[3]) || 2025, N = Number(process.argv[4]) || 4000;
 const partidos = M.prepararPartidos(M.leerCSV(fs.readFileSync(path.join(__dirname, '../datos/partidos.csv'), 'utf8')), 2010);
 M.calificar(partidos);
 const ctx = { jug: null, porEquipo: {}, semanas: {}, lesiones: null, titular: {} };
@@ -34,11 +36,11 @@ for (const w of MEZCLAS) {
   Object.keys(r.porTemp).forEach(k => { const c = r.porTemp[k]; console.log(`   ${k} ${String(c.n).padStart(5)} · ${pc(c.ok / c.n)}`); });
   const pp = r.porPartido.sort((a, b) => a - b); console.log(`   por partido: mediana ${pc(pp[Math.floor(pp.length / 2)])} · el 25% peor por debajo de ${pc(pp[Math.floor(pp.length / 4)])}`);
   if (w === P.MEZCLA) salida = {
-    desde, hasta, partidos: r.n, simulaciones: N, mezcla: w,
+    desde, hasta, ajustadoCon: '2016-2022', partidos: r.n, simulaciones: N, mezcla: w,
     mostrados: { n: t.n, acierto: t.ok / t.n, esperado: t.p / t.n },
     tipos: Object.keys(r.tipos).map(k => ({ tipo: NOMBRE[k] || k, n: r.tipos[k].n, acierto: r.tipos[k].ok / r.tipos[k].n, esperado: r.tipos[k].p / r.tipos[k].n })),
     temporadas: Object.keys(r.porTemp).map(k => ({ temporada: Number(k), n: r.porTemp[k].n, acierto: r.porTemp[k].ok / r.porTemp[k].n })),
     calibracion: Object.keys(r.cubos).map(Number).sort((a, b) => a - b).filter(b => b >= 50).map(b => ({ dicho: r.cubos[b].p / r.cubos[b].n, real: r.cubos[b].ok / r.cubos[b].n, n: r.cubos[b].n }))
   };
 }
-if (salida) fs.writeFileSync(path.join(__dirname, '../datos/validacion-picks.json'), JSON.stringify(salida));
+if (salida && desde === 2023 && hasta === 2025) fs.writeFileSync(path.join(__dirname, '../datos/validacion-picks.json'), JSON.stringify(salida));

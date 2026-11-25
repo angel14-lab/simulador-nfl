@@ -280,7 +280,7 @@
       '<tr><td class="izq">Modelo estadístico</td><td>' + n1(p.pred.visita) + '</td><td>' + n1(p.pred.local) + '</td></tr>' +
       (mercado ? '<tr><td class="izq">Línea del mercado</td><td>' + n1(mercado.v) + '</td><td>' + n1(mercado.l) + '</td></tr>' : '') +
       '<tr><td class="izq"><b>Usado en la simulación</b></td><td><b>' + n1(r.esp.visita) + '</b></td><td><b>' + n1(r.esp.local) + '</b></td></tr></table>' +
-      '<p class="nota">' + (r.reg && !r.reg.v ? 'Pronóstico guardado con la versión anterior: solo modelo, 10 000 simulaciones.' : pct(P.MEZCLA) + ' mercado y ' + pct(1 - P.MEZCLA) + ' modelo, ' + SIMS.toLocaleString('es') + ' simulaciones.') + '</p></section>' +
+      '<p class="nota">' + (r.reg && !r.reg.v ? 'Pronóstico guardado con la versión anterior: solo modelo, 10 000 simulaciones.' : (P.MEZCLA === 1 ? 'Puntos esperados tomados de la línea del mercado' : pct(P.MEZCLA) + ' mercado y ' + pct(1 - P.MEZCLA) + ' modelo') + ', ' + SIMS.toLocaleString('es') + ' simulaciones.') + '</p></section>' +
       '<section><h4>Temporada ' + E.ultima + '</h4>' + comparacion(p.visita, p.local) + '</section></div>' + lesiones(p) + '</details>';
     $('dialogo-cuerpo').innerHTML = h;
     var d = $('dialogo');
@@ -506,7 +506,7 @@
     if (v) {
       h += '<div class="cifras"><div class="cifra"><span>Picks de partido mostrados, ' + v.desde + '–' + v.hasta + '</span><b>' + pct(v.mostrados.acierto, 1) + '</b><small>' + v.mostrados.n.toLocaleString('es') + ' picks · anunciaban ' + pct(v.mostrados.esperado, 1) + '</small></div>' +
         '<div class="cifra"><span>Partidos probados</span><b>' + v.partidos.toLocaleString('es') + '</b><small>cada uno solo con lo que se sabía antes de jugarse</small></div>' +
-        '<div class="cifra"><span>Peso de la línea del mercado</span><b>' + pct(v.mezcla) + '</b><small>el resto, modelo estadístico</small></div></div>' +
+        '<div class="cifra"><span>Parámetros elegidos con</span><b>' + (v.ajustadoCon || '2016-2022') + '</b><small>el acierto de arriba es solo de ' + v.desde + '-' + v.hasta + ', años que no se usaron para elegir</small></div></div>' +
         '<div class="dos"><div class="panel"><h3>Lo que se dijo contra lo que pasó</h3>' + calibracion(v.calibracion, 'probabilidad anunciada', 0.5) +
         '<p class="nota">Todos los picks de partido calculados en la prueba, también los que no se muestran. Si los puntos caen sobre la diagonal, un 75% ocurre cerca del 75% de las veces.</p></div>' +
         '<div class="panel"><h3>Picks mostrados, por tipo</h3><table><tr><th class="izq">Tipo</th><th>Picks</th><th>Acierto</th><th>Anunciaban</th></tr>' +
@@ -515,7 +515,7 @@
         '<p class="nota">Las yardas de jugadores se validan aparte: 75-78% en 2023-2026 con la regla de los últimos 10 partidos.</p></div></div>';
     }
     h += '<div class="dos"><div class="panel texto"><h3>Cómo funciona</h3><ol>' +
-      '<li><b>Puntos esperados.</b> El modelo califica a cada equipo y a su quarterback con todos los partidos desde 2010, la eficiencia por jugada y el parte de lesiones. Esa expectativa se mezcla con la línea de las casas de apuestas, ' + pct(P.MEZCLA) + ' mercado y ' + pct(1 - P.MEZCLA) + ' modelo: es la mezcla que mejor predijo en 2016-2021, y se confirmó en 2022-2025.</li>' +
+      '<li><b>Puntos esperados.</b> El modelo califica a cada equipo y a su quarterback con todos los partidos desde 2010, la eficiencia por jugada y el parte de lesiones. Pero para los picks se usan los puntos que implica la línea de las casas de apuestas: al elegir el peso solo con 2016-2022, la línea sola predijo mejor que cualquier mezcla con el modelo, y también fue la mejor en 2023-2025, que no se usaron para elegir. El modelo queda para cuando no hay línea y como referencia en el análisis.</li>' +
       '<li><b>Simulación.</b> Cada partido se juega ' + SIMS.toLocaleString('es') + ' veces, serie ofensiva por serie: touchdowns, goles de campo, puntos extra, decisiones de final de partido y prórroga.</li>' +
       '<li><b>Líneas de la casa.</b> El día de cada partido se bajan las líneas y cuotas reales de una casa grande (ganador, hándicaps y totales alternativos; las yardas de jugadores, desde el día anterior). Los picks se eligen solo entre esas líneas: de cada mercado, la más probable que todavía paga al menos ' + P.CUOTA_MINIMA.toFixed(2) + '. Antes de ese día se muestran con líneas estimadas.</li>' +
       '<li><b>Los de cada partido.</b> Solo picks de al menos ' + pct(P.MINIMO) + ' que paguen ' + P.CUOTA_MINIMA.toFixed(2) + ' o más, del más al menos probable, hasta 10. Cada uno lleva su razón: lo que dicen las simulaciones, el mercado y lo que llevan los equipos o el jugador este año.</li>' +
