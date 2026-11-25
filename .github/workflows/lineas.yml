@@ -12,6 +12,11 @@ on:
 permissions:
   contents: write
 
+# Comparte grupo con actualizar-nfl.yml: los dos escriben datos/ y nunca corren a la vez.
+concurrency:
+  group: datos-nfl
+  cancel-in-progress: false
+
 jobs:
   lineas:
     runs-on: ubuntu-latest
