@@ -273,7 +273,9 @@
     if (bt) c.push({ tipo: 'total', eq: null, quien: 'Más de ' + bt.linea, que: 'puntos en el partido', prob: bt.prob, m: { m: 'total', mas: true, linea: bt.linea }, cuotaReal: bt.cuota, linea: { estimada: !R } });
     (principales || []).forEach(function (k) { if (k.tipo === 'jug' && enRango(k.prob) && (!k.cuotaReal || k.cuotaReal >= RIESGO_CUOTA)) c.push(k); });
     c.sort(function (a, b) { return a.cuotaReal && b.cuotaReal ? b.prob * b.cuotaReal - a.prob * a.cuotaReal : b.prob - a.prob; });
-    return c.slice(0, RIESGO_CUANTOS);
+    // Como mucho 2 de jugadores: así queda al menos uno del partido, menos ligado a los demás.
+    var jug = 0;
+    return c.filter(function (k) { return k.tipo !== 'jug' || ++jug <= 2; }).slice(0, RIESGO_CUANTOS);
   }
 
   // Acerca una probabilidad al 50% un 10%: 76% pasa a 73%.
