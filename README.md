@@ -2,11 +2,17 @@
 
 Sitio estático con los picks más probables de cada partido de la NFL: https://angel14-lab.github.io/simulador-nfl/
 
-- **Partidos**: la jornada por días, con probabilidad de victoria, línea del mercado y el mejor pick de cada partido.
-  Al abrir un partido se ven sus 10 picks más probables y, plegado, el análisis (diferencia de puntos, total, equipos, bajas).
-- **Mejores picks**: los más probables de toda la jornada.
+La página muestra solo picks: el pick con su línea, la probabilidad, la cuota rotulada («cuota justa del modelo»,
+y «cuota de la casa» solo cuando es real) y ⚠ si tiene alguna alerta. Las validaciones y la calibración se hacen por
+dentro y están documentadas aquí.
+
+- **Partidos**: la jornada por días con el mejor pick de cada partido. Al abrir un partido: sus picks (hasta 10),
+  los arriesgados, y debajo de cada pick, plegada, la escalera de líneas vecinas (verde si llega al 65%). Abajo, una
+  calculadora: metes la línea y la cuota de tu casa en yardas de pase, carrera o recepción, recepciones, pases de
+  touchdown del QB, puntos de un equipo, hándicap o total, y devuelve la probabilidad del modelo en esa línea exacta,
+  si llega al 65% y ⚠ si la cuota implica más de 10 puntos de diferencia. Lo que metes se guarda en tu navegador.
+- **Mejores picks**: el mejor de cada partido de la jornada (todos o solo los de 72% o más).
 - **Aciertos**: cada pick se guarda antes del partido y se califica al terminar.
-- **Equipos** y **Método**: calificaciones del modelo y la validación de los picks.
 
 ## Cómo se calculan
 
@@ -78,6 +84,36 @@ alcanza). Las recepciones sí se bajan con las yardas (7 créditos por partido, 
 simulador reparte las series entre las dos mitades (en 2016-2022 la primera mitad se llevó el 50.5% de los puntos) y el
 marcador al descanso sale del play-by-play de nflverse (`datos/mitades.csv`).
 
+## Tercera tanda: alertas y casas
+
+**Alertas** (`herramientas/probar-alertas.js` y `probar-alertas-jugador.js`). Para cada señal se miró si los picks
+que la tienen aciertan lo que anuncian; con 2016-2022 (jugadores 2020-2022) se ajustó cuánto habría que bajarles la
+probabilidad y se comprobó en 2023-2025:
+
+| Señal | 2016-2022 | 2023-2025 | Factor | Qué se hace |
+|---|---|---|---|---|
+| Partido: modelo propio y línea difieren más de 10 puntos | 958 · 72.4% / 72.5% | 352 · 72.4% / 72.3% | 1 | ⚠ |
+| Partido: QB de algún equipo en duda o dudoso | 870 · 73.0% / 72.7% | 372 · 73.4% / 72.9% | 1 | ⚠ |
+| Partido: algún equipo con menos de 4 partidos | 2 814 · 73.4% / 72.6% | 1 195 · 76.3% / 72.7% | 1 | ⚠ |
+| Jugador con menos de 4 partidos en la temporada | 273 · 73.6% / 70.1% | 272 · 73.2% / 70.0% | 1 | ⚠ |
+| Jugador cuyo QB está en duda o dudoso | 105 · 69.5% / 70.9% | 88 · 72.7% / 70.1% | 1 | ⚠ |
+| Pick con cuota real y la casa (sin margen) difiere más de 10 puntos | — | semanas 10-11: 16 · 43.8% / 65.4% (casa 51%) | — | manda la casa |
+| Jugador en duda | — | jugó 47-81% | — | sin pick |
+
+(acertaron / anunciaban). Las que aciertan lo que anuncian se dejan igual y solo se marcan con ⚠.
+
+**Betano Perú.** The Odds API no tiene Betano en la región «us» (solo `betano_uk`, en «uk»): las cuotas reales que
+se bajan son de casas de EE. UU. (DraftKings para jugadores) y se rotulan con su nombre. Se buscó una API con Betano
+Perú, sin scraping:
+- [Odds-API.io](https://odds-api.io/sportsbooks/betano-pe) lista «Betano PE» con fútbol americano, pero solo 3 mercados
+  (ganador, hándicap y total); los de jugadores de Betano PE solo para básquet y béisbol. Las claves gratis están
+  pausadas y los planes de pago empiezan en unas 49 libras al mes por 2 casas.
+- [OddsPapi](https://oddspapi.io/blog/betano-api-odds-access/) tiene `betano.pe`, pero como copia del feed global de
+  Betano, no con precios propios de Perú.
+
+No se conectó ninguna: ninguna da props de jugadores de Betano Perú para la NFL, y la que trae líneas de partido es
+de pago. La calculadora y la escalera de líneas sirven para comparar con la línea exacta de Betano.
+
 ## Datos
 
 Todo viene de [nflverse](https://github.com/nflverse): resultados, calendario, líneas de cierre y quarterbacks
@@ -114,6 +150,7 @@ puntos por equipo y el viento previsto. Validado de 2016 a 2025: acierta el gana
 | `herramientas/actualizar-datos.js` | Actualiza la copia local de los datos (partidos, eficiencia, lesiones y marcador al descanso). |
 | `herramientas/probar-factores.js` | Prueba factores de contexto sobre lo que la línea del mercado no explica (segunda tanda). |
 | `herramientas/probar-mercados.js`, `probar-mercados-jugador.js` | Prueban mercados candidatos y su calibración (segunda tanda). |
+| `herramientas/probar-alertas.js`, `probar-alertas-jugador.js` | Prueban qué hacer con los picks que tienen una señal de alerta (tercera tanda). |
 
 Las probabilidades son estimaciones estadísticas. El modelo no lee noticias; lo que pesa una baja importante entra a través de
 la línea del mercado (ponderar las lesiones por importancia no mejoró la prueba).

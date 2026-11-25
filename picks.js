@@ -43,6 +43,123 @@
      equipo que anota primero (22 picks; sin calibrar 68.3% anunciando 68.6%, y 66.4% anunciando 68.7% en 2016-2022). */
   var CAL_MERCADO = { equipo: { a: 0.04, b: 0.9 }, tdsEquipo: { a: 0.03, b: 0.95 }, mitadGana: { a: -0.01, b: 1.05 }, mitadHandicap: { a: -0.01, b: 1 }, mitadTotal: { a: 0.02, b: 1 } };
   function calMercado(k, q) { var c = CAL_MERCADO[k]; return Math.min(0.99, Math.max(0.01, 0.5 + c.a + (q - 0.5) * c.b)); }
+  function r3(x) { return Math.round(x * 1000) / 1000; }
+
+  /* Probabilidad de cualquier mercado de partido en una simulación, sin calibrar. m: {m, eq, linea, mas}.
+     Con línea entera, el empate no cuenta (la casa devuelve la apuesta). */
+  function cruda(sim, m, p) {
+    var L = m.eq === p.local, a = 0, n = 0, i, v, d;
+    function contar(f) { for (i = 0; i < sim.n; i++) { v = f(i); if (v === null) continue; n++; if (v) a++; } return n ? a / n : 0; }
+    function sobre(valor) { return contar(function (k) { d = valor(k) - m.linea; return d === 0 ? null : (d > 0) === (m.mas !== false); }); }
+    switch (m.m) {
+      case 'gana': return L ? sim.pLocal : sim.pVisita;
+      case 'handicap': return contar(function (k) { d = (L ? 1 : -1) * (sim.local[k] - sim.visita[k]) + m.linea; return d === 0 ? null : d > 0; });
+      case 'total': return sobre(function (k) { return sim.local[k] + sim.visita[k]; });
+      case 'equipo': return sobre(function (k) { return L ? sim.local[k] : sim.visita[k]; });
+      case 'tdsEquipo': return sobre(function (k) { return L ? sim.tdLocal[k] : sim.tdVisita[k]; });
+      case 'mitadGana': return sim.mitadLocal ? contar(function (k) { d = sim.mitadLocal[k] - sim.mitadVisita[k]; return d === 0 ? null : (d > 0) === L; }) : null;
+      case 'mitadHandicap': return sim.mitadLocal ? contar(function (k) { d = (L ? 1 : -1) * (sim.mitadLocal[k] - sim.mitadVisita[k]) + m.linea; return d === 0 ? null : d > 0; }) : null;
+      case 'mitadTotal': return sim.mitadLocal ? sobre(function (k) { return sim.mitadLocal[k] + sim.mitadVisita[k]; }) : null;
+    }
+    return null;
+  }
+  // Corrección del historial real de un tipo de pick (ver calcularCorreccion).
+  function corregido(ctx, tipo, q) { var c = ctx && ctx.correccion && ctx.correccion[tipo]; return c && c.factor != null ? 0.5 + (q - 0.5) * c.factor : q; }
+  /* La probabilidad que daría la página a ese mercado en esa línea: calibración del mercado (sobre el lado más
+     probable) y, si se pide, la corrección del historial. */
+  function probPartido(ctx, p, sim, m) {
+    var q = cruda(sim, m, p);
+    if (q == null) return null;
+    if (CAL_MERCADO[m.m]) q = q >= 0.5 ? calMercado(m.m, q) : 1 - calMercado(m.m, 1 - q);
+    return corregido(ctx, m.m, q);
+  }
+  /* Jugador: modelo calibrado en una línea. k = pase, carrera, recepcion, atrapadas o tdPase. */
+  function probJugadorLinea(ctx, pr, k, linea, mas) {
+    if (!pr || !pr[k]) return null;
+    var q = k === 'tdPase' ? probJugador(pr, 'tdPase', Math.floor(linea) + 1) : 0.5 + (M.probAlMenos(pr[k].m, pr[k].sd, Math.floor(linea) + 1) - 0.5) * calibraJugador(k);
+    if (mas === false) q = 1 - q;
+    return corregido(ctx, k === 'tdPase' ? 'tdPase' : 'yardas', q);
+  }
+
+  /* Escalera de líneas: el mismo pick en las líneas vecinas, para encontrar la que ofrece la casa.
+     Se guarda sin la corrección del historial; corregir() se la aplica igual que al pick. [[línea, prob], …] */
+  var PASO = { pase: 10, carrera: 5, recepcion: 5, atrapadas: 1 };
+  var DESDE_CERO = { total: 1, equipo: 1, tdsEquipo: 1, mitadTotal: 1 };
+  function escaleraPartido(p, sim, m) {
+    if (m.linea == null) return null;
+    var r = [], i, l, q;
+    for (i = -3; i <= 3; i++) {
+      l = m.linea + i;
+      if (DESDE_CERO[m.m] && l < 0.5) continue;
+      q = probPartido(null, p, sim, { m: m.m, eq: m.eq, mas: m.mas, linea: l });
+      if (q != null) r.push([l, r3(q)]);
+    }
+    return r;
+  }
+  // Media de la distribución del jugador con la que se cumple «más de» la línea con probabilidad q (misma desviación).
+  function mediaPara(sd, linea, q) {
+    var a = 0.1, b = linea * 4 + 60, x, i;
+    for (i = 0; i < 50; i++) { x = (a + b) / 2; if (M.probAlMenos(x, sd, Math.floor(linea) + 1) < q) a = x; else b = x; }
+    return (a + b) / 2;
+  }
+  /* Jugadores: con línea estimada, el modelo calibrado. Con línea de la casa, el promedio del modelo y la
+     distribución que implica la casa (su probabilidad sin margen en su línea), así coincide con el pick en esa
+     línea; si la casa manda sola (alerta «modelo»), solo la de la casa. */
+  function escaleraJugador(pr, k, linea, mas, cuotas, soloCasa) {
+    var r = [], i, l, q, mc = null;
+    if (cuotas && cuotas.mas > 1 && cuotas.menos > 1) mc = mediaPara(pr[k].sd, cuotas.l, (1 / cuotas.mas) / (1 / cuotas.mas + 1 / cuotas.menos));
+    for (i = -3; i <= 3; i++) {
+      l = linea + i * PASO[k];
+      if (l <= 0) continue;
+      q = 0.5 + (M.probAlMenos(pr[k].m, pr[k].sd, Math.floor(l) + 1) - 0.5) * calibraJugador(k);
+      if (mc != null) { var c = M.probAlMenos(mc, pr[k].sd, Math.floor(l) + 1); q = soloCasa ? c : (q + c) / 2; }
+      r.push([l, r3(mas ? q : 1 - q)]);
+    }
+    return r;
+  }
+
+  /* Señales de alerta. Validadas en herramientas/probar-alertas.js y probar-alertas-jugador.js: los picks con
+     QB sin confirmar o con pocos partidos, y los de partido en que el modelo propio y la línea difieren más de
+     10 puntos, aciertan lo que anuncian (2023-2025), así que solo se marcan con ⚠. Cuando el pick tiene cuota
+     real y la casa (sin margen) difiere más de 10 puntos, manda la casa: en las semanas 10-11 esos picks de
+     jugadores anunciaban 65% y acertaron 44% (la casa decía 51%). Los jugadores en duda no reciben pick. */
+  var DIFERENCIA = 0.10;
+  function qbSinConfirmar(ctx, p, eq) {
+    if (p.jugado) return false;
+    var nombre = eq === p.local ? p.qbLocal : p.qbVisita, sem = parte(ctx.lesiones, p);
+    if (!nombre) return true;
+    var n = normalizar(nombre);
+    return ((sem && sem[eq]) || []).some(function (x) { return x.p === 'QB' && normalizar(x.n) === n && (x.e === 'Out' || x.e === 'Doubtful' || x.e === 'Questionable'); });
+  }
+  // Fechas de los partidos jugados de cada equipo por temporada: {'2026|KC': [fechas]}.
+  function contarFechas(partidos) {
+    var r = {};
+    partidos.forEach(function (p) { if (p.jugado) [p.local, p.visita].forEach(function (e) { (r[p.temporada + '|' + e] = r[p.temporada + '|' + e] || []).push(p.fecha); }); });
+    return r;
+  }
+  function pocosPartidos(ctx, p, eq) {
+    var f = ctx.fechas && ctx.fechas[p.temporada + '|' + eq];
+    return !!f && f.filter(function (d) { return d < p.fecha; }).length < 4;
+  }
+  function simPropio(p, sim) { // el modelo propio, sin la línea del mercado
+    if (sim._propio === undefined) sim._propio = p.pred ? M.simular(Math.max(3, p.pred.local), Math.max(3, p.pred.visita), 20000, M.semillaDe(p.id + '|propio'), p.tipo !== 'REG') : null;
+    return sim._propio;
+  }
+  function alertar(k, codigo) { if (!k.alerta) k.alerta = []; if (k.alerta.indexOf(codigo) < 0) k.alerta.push(codigo); }
+  function alertasPartido(ctx, p, sim, k) {
+    if (k.tipo === 'jug') return;
+    if (qbSinConfirmar(ctx, p, p.local) || qbSinConfirmar(ctx, p, p.visita)) alertar(k, 'qb');
+    if (pocosPartidos(ctx, p, p.local) || pocosPartidos(ctx, p, p.visita)) alertar(k, 'muestra');
+    var propio = !k.cuotaReal && simPropio(p, sim);
+    if (propio) { var a = cruda(sim, k.m, p), b = cruda(propio, k.m, p); if (a != null && b != null && Math.abs(a - b) > DIFERENCIA) alertar(k, 'modelo'); }
+  }
+  // Con cuota real de los dos lados: si la casa sin margen difiere más de 10 puntos, manda la casa.
+  function conCasa(c, cuota, contraria) {
+    if (!(cuota > 1 && contraria > 1)) return c;
+    var casa = (1 / cuota) / (1 / cuota + 1 / contraria);
+    if (Math.abs(c.prob - casa) > DIFERENCIA) { c.prob = casa; c.alerta = ['modelo']; }
+    return c;
+  }
   // Hitos de yardas que se proponen como pick, con la columna de los partidos del jugador donde está el dato real.
   var HITOS = {
     pase: { nombre: 'yardas de pase', col: 4, escala: [150, 175, 200, 225, 250, 275, 300], uso: 3, usoMin: 25, usoTexto: function (u) { return Math.round(u) + ' pases por partido'; } },
@@ -228,25 +345,26 @@
     var real = R ? { estimada: false, casa: R.casaLineas || R.casa } : { estimada: true };
 
     // Ganador.
-    var ef = sim.pLocal >= sim.pVisita ? p.local : p.visita, pg = Math.max(sim.pLocal, sim.pVisita);
-    poner('partido', ef, NOMBRES[ef] || ef, 'gana el partido', pg, { m: 'gana', eq: ef }, R && R.ml[ef] ? { cuotaReal: R.ml[ef] } : null);
+    var ef = sim.pLocal >= sim.pVisita ? p.local : p.visita, pg = Math.max(sim.pLocal, sim.pVisita), otro = ef === p.local ? p.visita : p.local;
+    var cg = R && R.ml[ef] ? conCasa({ prob: pg }, R.ml[ef], R.ml[otro]) : { prob: pg };
+    poner('partido', ef, NOMBRES[ef] || ef, 'gana el partido', cg.prob, { m: 'gana', eq: ef }, R && R.ml[ef] ? { cuotaReal: R.ml[ef], alerta: cg.alerta } : null);
 
     var i, r, hl;
     if (R) {
       // Hándicap: las líneas alternativas que ofrece la casa para cada equipo.
       [p.local, p.visita].forEach(function (eq) {
-        var lineas = R.hs[eq] || {}, cands = Object.keys(lineas).map(function (l) {
+        var lineas = R.hs[eq] || {}, contra = R.hs[eq === p.local ? p.visita : p.local] || {}, cands = Object.keys(lineas).map(function (l) {
           var h = Number(l), c = M.cubrir(sim, eq === p.local ? h : -h), q = (eq === p.local ? c.local : c.visita) / (1 - c.nulo || 1);
-          return { linea: h, prob: q, cuota: lineas[l] };
+          return conCasa({ linea: h, prob: q, cuota: lineas[l] }, lineas[l], contra[-h]);
         }).filter(function (c) { return Math.abs(c.linea) !== 0.5; });
         var b = mejorReal(cands);
-        if (b) poner('partido', eq, textoHandicap(eq, b.linea), 'hándicap', b.prob, { m: 'handicap', eq: eq, linea: b.linea }, { cuotaReal: b.cuota, linea: real });
+        if (b) poner('partido', eq, textoHandicap(eq, b.linea), 'hándicap', b.prob, { m: 'handicap', eq: eq, linea: b.linea }, { cuotaReal: b.cuota, linea: real, alerta: b.alerta });
       });
       // Total de puntos: solo «más de», entre las líneas alternativas de la casa.
       var bt = mejorReal(Object.keys(R.ts.mas || {}).map(function (l) {
-        var t = M.totales(sim, Number(l)); return { linea: Number(l), prob: t.mas / (1 - t.nulo || 1), cuota: R.ts.mas[l] };
+        var t = M.totales(sim, Number(l)); return conCasa({ linea: Number(l), prob: t.mas / (1 - t.nulo || 1), cuota: R.ts.mas[l] }, R.ts.mas[l], (R.ts.menos || {})[l]);
       }));
-      if (bt) poner('total', null, 'Más de ' + bt.linea, 'puntos en el partido', bt.prob, { m: 'total', mas: true, linea: bt.linea }, { cuotaReal: bt.cuota, linea: real });
+      if (bt) poner('total', null, 'Más de ' + bt.linea, 'puntos en el partido', bt.prob, { m: 'total', mas: true, linea: bt.linea }, { cuotaReal: bt.cuota, linea: real, alerta: bt.alerta });
     } else {
       // Sin líneas de la casa todavía: la línea de medio punto más exigente que se cumple el 70% de las veces.
       var mejorL = null, mejorV = null, masT = null, lt, centroH = p.linea != null ? -p.linea : -Math.round(esp.local - esp.visita);
@@ -285,9 +403,8 @@
          es el promedio del modelo calibrado y la de la casa sin margen; si no llega al mínimo, no hay pick. */
     var R2 = ctx.lineas && ctx.lineas[p.id], conLineas = !!(R2 && R2.confirmado && R2.jug);
     if (!p.jugado || reconstruir) {
-      var hora = conLineas ? new Date(R2.confirmado) : null, antes = hora ? Math.round(((inicio(p) || hora) - hora) / 60000) : 0;
-      var ENTRENO = { FP: 'entrenó completo', LP: 'entrenó limitado', NPd: 'descansó en el entrenamiento', FPd: 'entrenó completo', LPd: 'entrenó limitado' };
       [['v', p.visita], ['l', p.local]].forEach(function (x) {
+        var qbDuda = qbSinConfirmar(ctx, p, x[1]);
         var semanasEq = Object.keys(ctx.semanas[x[1]] || {}).map(Number).filter(function (s) { return s < p.semana; }).sort(function (a, b) { return b - a; }).slice(0, 4);
         jugadoresDe(ctx, p, x[0], reconstruir).forEach(function (j) {
           if (j.duda || j.entreno === 'NP') return; // en duda o sin entrenar por lesión: puede no jugar
@@ -303,19 +420,26 @@
             var linea, cuotas = null;
             if (conLineas) { linea = reales[k].l; cuotas = reales[k]; }
             else { var ys = j.previos.map(function (g) { return g[HITOS[k].col]; }).sort(function (a, b) { return a - b; }); linea = Math.floor(ys[Math.floor(ys.length / 2)]) + 0.5; }
-            // Con línea real: promedio del modelo calibrado y la casa sin margen. Sin ella: solo el modelo calibrado.
-            var q = conLineas ? probConCasa(j.pr, k, cuotas).mas : 0.5 + (M.probAlMenos(j.pr[k].m, j.pr[k].sd, Math.floor(linea) + 1) - 0.5) * calibraJugador(k), arriba = q >= 0.5;
-            var logrados = j.previos.filter(function (g) { return arriba ? g[HITOS[k].col] > linea : g[HITOS[k].col] < linea; }).length;
-            var dispo = j.entreno ? ENTRENO[j.entreno] || 'sin restricciones en el parte' : 'no figura en el parte de lesiones';
+            // Con línea real: promedio del modelo calibrado y la casa sin margen; si difieren más de 10 puntos, la casa.
+            // Sin ella: solo el modelo calibrado.
+            var cc = conLineas ? probConCasa(j.pr, k, cuotas) : null, soloCasa = !!(cc && cc.casa != null && Math.abs(cc.modelo - cc.casa) > DIFERENCIA);
+            var q = cc ? (soloCasa ? cc.casa : cc.mas) : 0.5 + (M.probAlMenos(j.pr[k].m, j.pr[k].sd, Math.floor(linea) + 1) - 0.5) * calibraJugador(k), arriba = q >= 0.5;
+            var al = [];
+            if (soloCasa) al.push('modelo');
+            if (temp.length < 4) al.push('muestra');
+            if (qbDuda && j.j.p !== 'QB') al.push('qb');
             poner('jug', j.eq, j.j.n, (arriba ? 'más de ' : 'menos de ') + linea + ' ' + HITOS[k].nombre, Math.max(q, 1 - q), { m: 'yardas', id: j.j.id, est: k, linea: linea, mas: arriba },
-              { cuotaReal: cuotas ? (arriba ? cuotas.mas : cuotas.menos) : null, linea: { estimada: !conLineas },
-                resp: (conLineas ? 'línea de la casa, bajada ' + (antes >= 120 ? Math.round(antes / 60) + ' h' : antes + ' min') + ' antes del inicio' : 'línea estimada (mediana de sus últimos ' + j.previos.length + ')') +
-                  ' · ' + dispo + ' · ' + HITOS[k].usoTexto(uso) + ' · jugó ' + jugo + ' de los 4 últimos · lo logró en ' + logrados + ' de sus últimos ' + j.previos.length });
+              { cuotaReal: cuotas ? (arriba ? cuotas.mas : cuotas.menos) : null, linea: { estimada: !conLineas }, alerta: al.length ? al : undefined,
+                esc: escaleraJugador(j.pr, k, linea, arriba, cuotas, soloCasa) });
           });
         });
       });
     }
-    lista.forEach(function (k) { corregir(ctx, k); });
+    lista.forEach(function (k) {
+      if (k.tipo !== 'jug') { k.esc = escaleraPartido(p, sim, k.m); alertasPartido(ctx, p, sim, k); }
+      if (!k.alerta) delete k.alerta;
+      corregir(ctx, k);
+    });
     return lista.sort(function (a, b) { return b.prob - a.prob; });
   }
   /* Picks arriesgados: más probables que no (55% a 65%) pero con mejor cuota (1.55 o más).
@@ -351,7 +475,7 @@
     lt.forEach(function (l) { var t = M.totales(sim, l); ct.push({ linea: l, prob: t.mas / (1 - t.nulo || 1), cuota: R ? R.ts.mas[l] : null }); });
     var bt = elegir(ct);
     if (bt) c.push({ tipo: 'total', eq: null, quien: 'Más de ' + bt.linea, que: 'puntos en el partido', prob: bt.prob, m: { m: 'total', mas: true, linea: bt.linea }, cuotaReal: bt.cuota, linea: { estimada: !R } });
-    c.forEach(function (k) { corregir(ctx, k); });
+    c.forEach(function (k) { k.esc = escaleraPartido(p, sim, k.m); alertasPartido(ctx, p, sim, k); corregir(ctx, k); });
     c = c.filter(function (k) { return enRango(k.prob); });
     // Recepciones no: solo se validaron en 65-80% (segunda tanda), no como arriesgadas.
     (principales || []).forEach(function (k) { if (k.tipo === 'jug' && k.m.est !== 'atrapadas' && enRango(k.prob) && (!k.cuotaReal || k.cuotaReal >= RIESGO_CUOTA)) c.push(k); });
@@ -391,6 +515,7 @@
     var c = ctx && ctx.correccion && k.m && ctx.correccion[k.m.m];
     if (!c || c.factor == null) return k;
     k.p0 = k.prob; k.prob = 0.5 + (k.prob - 0.5) * c.factor; k.corregida = true;
+    if (k.esc) k.esc = k.esc.map(function (x) { return [x[0], r3(0.5 + (x[1] - 0.5) * c.factor)]; });
     return k;
   }
 
@@ -478,5 +603,6 @@
   }
 
   return { NOMBRES: NOMBRES, MARGEN_CONGELAR: MARGEN_CONGELAR, MINIMO: MINIMO, SEGURO: SEGURO, MAXIMO: MAXIMO, calcularCorreccion: calcularCorreccion, MIN_CORRECCION: MIN_CORRECCION, arriesgados: arriesgados, RIESGO_MIN: RIESGO_MIN, RIESGO_MAX: RIESGO_MAX, RIESGO_CUOTA: RIESGO_CUOTA, CUOTA_MINIMA: CUOTA_MINIMA, CUANTOS: CUANTOS, MEZCLA: MEZCLA, apto: apto, mejores: mejores, conLineas: conLineas, normalizar: normalizar, indexar: indexar, parte: parte, jugadoresDe: jugadoresDe, probJugador: probJugador,
-    lineaEquipo: lineaEquipo, masDe: masDe, masQue: masQue, CUENTAS: CUENTAS, lineaJusta: lineaJusta, mezclar: mezclar, probConCasa: probConCasa, picksDe: picksDe, inicio: inicio, calificar: calificar, textoHandicap: textoHandicap };
+    lineaEquipo: lineaEquipo, masDe: masDe, masQue: masQue, CUENTAS: CUENTAS, lineaJusta: lineaJusta, mezclar: mezclar, probConCasa: probConCasa, picksDe: picksDe, inicio: inicio, calificar: calificar, textoHandicap: textoHandicap,
+    HITOS: HITOS, PASO: PASO, cruda: cruda, probPartido: probPartido, probJugadorLinea: probJugadorLinea, contarFechas: contarFechas, DIFERENCIA: DIFERENCIA };
 });

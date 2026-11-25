@@ -12,7 +12,9 @@ const fs = require('fs'), path = require('path');
 const P = require('../picks.js');
 const CLAVE = process.env.ODDS_API_KEY, BASE = process.env.ODDS_API_BASE || 'https://api.the-odds-api.com';
 const DEPORTE = '/v4/sports/americanfootball_nfl', archivo = path.join(__dirname, '../datos/lineas.json');
-const CASAS = ['betano', 'draftkings', 'fanduel', 'betmgm', 'williamhill_us', 'betrivers']; // orden de preferencia
+// Orden de preferencia. Son casas de EE. UU. (región «us»): Betano no está en esa región de The Odds API
+// (solo betano_uk, en «uk»), así que estas cuotas no son las de Betano Perú; la página las rotula con el nombre de la casa.
+const CASAS = ['draftkings', 'fanduel', 'betmgm', 'williamhill_us', 'betrivers'];
 const PARTIDO = ['h2h', 'alternate_spreads', 'alternate_totals'];
 const JUGADOR = ['player_pass_yds', 'player_rush_yds', 'player_reception_yds', 'player_receptions'];
 const DE_JUGADOR = { player_pass_yds: 'pase', player_rush_yds: 'carrera', player_reception_yds: 'recepcion', player_receptions: 'atrapadas' };
