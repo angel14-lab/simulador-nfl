@@ -413,25 +413,27 @@
 
   // ---------- vista: mejores picks de la jornada ----------
   function vistaPicks() {
-    var todos = [], riesgo = [];
+    /* Como mucho 1 pick por partido en cada columna: los de un mismo partido están ligados (hándicap,
+       total y yardas del quarterback suben y bajan juntos), así la lista de la jornada es de picks
+       independientes. Se queda el más probable de cada partido que pasa el filtro elegido. */
+    var todos = [], riesgo = [], seguro = function (k) { return k.prob >= SEGURO_MIN && (k.cuotaReal ? k.cuotaReal >= P.CUOTA_MINIMA : k.prob <= P.MAXIMO); };
     partidosDeJornada().forEach(function (p) {
       if (iniciado(p)) return;
-      var r = pronostico(p);
-      r.top.forEach(function (k) { todos.push(k); });
-      r.riesgo.forEach(function (k) { k.riesgo = true; riesgo.push(k); });
+      var r = pronostico(p), cand = r.top.filter(function (k) { return E.filtroPicks !== 'seguros' || seguro(k); });
+      if (cand.length) todos.push(cand[0]);
+      if (r.riesgo.length) { r.riesgo.forEach(function (k) { k.riesgo = true; }); riesgo.push(r.riesgo[0]); }
     });
     riesgo.sort(function (a, b) { return b.prob - a.prob; });
     todos.sort(function (a, b) { return b.prob - a.prob; });
     // Seguros: 72% o más, sin bajar la cuota mínima de 1.25 (con cuota real manda lo que paga la casa).
-    if (E.filtroPicks === 'seguros') todos = todos.filter(function (k) { return k.prob >= SEGURO_MIN && (k.cuotaReal ? k.cuotaReal >= P.CUOTA_MINIMA : k.prob <= P.MAXIMO); });
     var ver = todos.slice(0, 40);
     var filtro = '<div class="segmento filtro" role="group" aria-label="Filtro de picks">' + [['todos', 'Todos (' + pct(P.MINIMO) + '+)'], ['seguros', 'Seguros (' + pct(SEGURO_MIN) + '+)']].map(function (f) {
       return '<button data-filtro="' + f[0] + '" aria-pressed="' + ((E.filtroPicks || 'todos') === f[0]) + '">' + f[1] + '</button>'; }).join('') + '</div>';
     vista.innerHTML = cabecera('Mejores picks') + filtro +
       (ver.length ? '<div class="d-picks"><div class="panel"><h3>Más probables</h3><ol class="picks">' + ver.map(function (k, i) { return filaPick(k, i, true); }).join('') + '</ol></div>' +
-        '<div class="panel riesgo"><h3>Arriesgados</h3><ol class="picks">' + riesgo.slice(0, 20).map(function (k, i) { return filaPick(k, i, true); }).join('') + '</ol>' +
+        '<div class="panel riesgo"><h3>Arriesgados</h3><ol class="picks">' + riesgo.map(function (k, i) { return filaPick(k, i, true); }).join('') + '</ol>' +
         '<p class="nota">De ' + pct(P.RIESGO_MIN) + ' a ' + pct(P.RIESGO_MAX) + ' y pagan ' + P.RIESGO_CUOTA.toFixed(2) + ' o más. En 2016-2025 acertaron 58%.</p></div></div>' +
-        '<p class="nota">Los ' + ver.length + ' más probables entre los partidos que faltan. Los picks de un mismo partido están relacionados: si el partido sale distinto de lo esperado, suelen fallar varios a la vez.</p>' :
+        '<p class="nota">El mejor pick de cada partido que falta, uno por partido: los de un mismo partido están ligados y suelen fallar juntos. Los demás picks de cada partido se ven al abrirlo.</p>' :
         '<p class="vacio">' + (E.filtroPicks === 'seguros' ? 'Ningún pick de los partidos que faltan llega al ' + pct(SEGURO_MIN) + ' con cuota de ' + P.CUOTA_MINIMA.toFixed(2) + ' o más.' : 'No quedan partidos por empezar en esta jornada.') + '</p>');
     activarCabecera();
     vista.querySelectorAll('[data-filtro]').forEach(function (b) { b.onclick = function () { E.filtroPicks = b.getAttribute('data-filtro'); vistaPicks(); }; });
