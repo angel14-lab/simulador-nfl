@@ -4525,13 +4525,13 @@ game_id,season,game_type,week,gameday,gametime,away_team,away_score,home_team,ho
 2026_11_JAX_NYG,2026,REG,11,2026-11-22,16:25,JAX,18,NYG,23,Home,0,-261,215,-6,45.5,Trevor Lawrence,J.J. McCarthy,MetLife Stadium,00-0036971,00-0039923,7,10,outdoors,-6.47,-10.34,0|1|1,0|0|0,1,2,7
 2026_11_MIN_SF,2026,REG,11,2026-11-22,20:20,MIN,10,SF,35,Neutral,0,170,-203,4.5,44.5,Kirk Cousins,Brock Purdy,Estadio Banorte,00-0029604,00-0037834,7,7,outdoors,-3.09,16.45,1|0|0,0|0|0,1,5,1
 2026_11_CIN_WAS,2026,REG,11,2026-11-23,20:15,CIN,20,WAS,22,Home,0,-292,238,-6,54.5,Joe Burrow,Jayden Daniels,Northwest Stadium,00-0036442,00-0039910,8,11,outdoors,2.12,3.87,1|1|2,0|0|0,2,1,7
-2026_12_GB_LA,2026,REG,12,2026-11-25,20:00,GB,,LA,,Home,,117,-138,2.5,44.5,Jordan Love,Matthew Stafford,SoFi Stadium,00-0036264,00-0026498,10,10,dome,,,0|0|0,1|2|0,,,
-2026_12_CHI_DET,2026,REG,12,2026-11-26,13:00,CHI,,DET,,Home,,-121,102,-1.5,55.5,Caleb Williams,Jared Goff,Ford Field,00-0039918,00-0033106,4,4,dome,,,0|0|0,0|0|0,,,
+2026_12_GB_LA,2026,REG,12,2026-11-25,20:00,GB,,LA,,Home,,116,-137,2.5,44.5,Jordan Love,Matthew Stafford,SoFi Stadium,00-0036264,00-0026498,10,10,dome,,,0|0|0,1|2|0,,,
+2026_12_CHI_DET,2026,REG,12,2026-11-26,13:00,CHI,,DET,,Home,,-124,105,-1.5,55.5,Caleb Williams,Jared Goff,Ford Field,00-0039918,00-0033106,4,4,dome,,,0|0|0,0|0|0,,,
 2026_12_PHI_DAL,2026,REG,12,2026-11-26,16:30,PHI,,DAL,,Home,,363,-469,8.5,48.5,Joe Milton III,Dak Prescott,AT&T Stadium,00-0039398,00-0033077,4,4,,,,0|0|0,0|0|0,,,
 2026_12_KC_BUF,2026,REG,12,2026-11-26,20:20,KC,,BUF,,Home,,127,-150,3,46.5,Patrick Mahomes,Josh Allen,Highmark Stadium,00-0033873,00-0034857,4,4,outdoors,,,0|0|0,0|0|0,,,
-2026_12_DEN_PIT,2026,REG,12,2026-11-27,15:00,DEN,,PIT,,Home,,-204,171,-3.5,36.5,Bo Nix,Mason Rudolph,Acrisure Stadium,00-0039732,00-0034771,5,5,outdoors,,,0|0|0,0|0|0,,,
-2026_12_NO_CIN,2026,REG,12,2026-11-29,13:00,NO,,CIN,,Home,,438,-588,10,50.5,Tyler Shough,Joe Burrow,Paycor Stadium,00-0040743,00-0036442,7,6,outdoors,,,0|0|0,0|0|0,,,
-2026_12_BAL_HOU,2026,REG,12,2026-11-29,13:00,BAL,,HOU,,Home,,249,-307,7,47.5,Jacoby Brissett,C.J. Stroud,Reliant Stadium,00-0033119,00-0039163,7,10,,,,0|0|0,0|0|0,,,
+2026_12_DEN_PIT,2026,REG,12,2026-11-27,15:00,DEN,,PIT,,Home,,-205,171,-3.5,36.5,Bo Nix,Mason Rudolph,Acrisure Stadium,00-0039732,00-0034771,5,5,outdoors,,,0|0|0,0|0|0,,,
+2026_12_NO_CIN,2026,REG,12,2026-11-29,13:00,NO,,CIN,,Home,,451,-610,10,50.5,Tyler Shough,Joe Burrow,Paycor Stadium,00-0040743,00-0036442,7,6,outdoors,,,0|0|0,0|0|0,,,
+2026_12_BAL_HOU,2026,REG,12,2026-11-29,13:00,BAL,,HOU,,Home,,262,-326,7,47.5,Jacoby Brissett,C.J. Stroud,Reliant Stadium,00-0033119,00-0039163,7,10,,,,0|0|0,0|0|0,,,
 2026_12_NYG_IND,2026,REG,12,2026-11-29,13:00,NYG,,IND,,Home,,-303,246,-6.5,41.5,J.J. McCarthy,Anthony Richardson,Lucas Oil Stadium,00-0039923,00-0039164,7,10,,,,0|0|0,0|0|0,,,
 2026_12_TEN_JAX,2026,REG,12,2026-11-29,13:00,TEN,,JAX,,Home,,710,-1120,14.5,48.5,Cam Ward,Trevor Lawrence,EverBank Stadium,00-0040676,00-0036971,7,7,outdoors,,,0|0|0,0|0|0,,,
 2026_12_NYJ_MIA,2026,REG,12,2026-11-29,13:00,NYJ,,MIA,,Home,,-195,164,-3.5,40.5,Geno Smith,Kyle McCord,Hard Rock Stadium,00-0030565,00-0040014,7,7,outdoors,,,0|0|0,0|0|0,,,
