@@ -56,7 +56,8 @@
     if (!ctx.jug || p.temporada !== ctx.jug.temporada || (p.jugado && !reconstruir)) return [];
     function antes(g) { return !p.jugado || g[0] < p.temporada || (g[0] === p.temporada && g[1] < p.semana); }
     var eq = lado === 'l' ? p.local : p.visita, rival = lado === 'l' ? p.visita : p.local, sem = parte(ctx.lesiones, p), estado = {};
-    ((sem && sem[eq]) || []).forEach(function (x) { estado[x.n] = x.e; });
+    var entreno = {};
+    ((sem && sem[eq]) || []).forEach(function (x) { estado[x.n] = x.e; if (x.pr) entreno[x.n] = x.pr + (x.d ? 'd' : ''); });
     var semanas = Object.keys(ctx.semanas[eq] || {}).map(Number).filter(function (s) { return !p.jugado || s < p.semana; }).sort(function (a, b) { return a - b; });
     var limite = semanas.length > 1 ? semanas[semanas.length - 2] : 0;
     var titular = (lado === 'l' ? p.qbLocalId : p.qbVisitaId) || (ctx.titular[eq] || {}).id;
@@ -67,7 +68,7 @@
       if (j.p === 'QB' ? j.id !== titular : (ult[0] !== ctx.jug.temporada || ult[1] < limite)) return; // suplentes y ausentes recientes
       if (estado[j.n] === 'Out' || estado[j.n] === 'Doubtful') return;
       var pr = M.proyectar({ p: j.p, j: previos }, ctx.jug.temporada, p.jugado ? null : ctx.jug, rival);
-      if (pr) lista.push({ j: j, eq: eq, pr: pr, previos: previos.slice(-10), duda: estado[j.n] === 'Questionable' });
+      if (pr) lista.push({ j: j, eq: eq, pr: pr, previos: previos.slice(-10), duda: estado[j.n] === 'Questionable', entreno: entreno[j.n] || '' });
     });
     function valor(x) { return (x.pr.pase ? 1000 : 0) + (x.pr.carrera ? x.pr.carrera.m : 0) + (x.pr.recepcion ? x.pr.recepcion.m : 0); }
     return lista.sort(function (a, b) { return valor(b) - valor(a); });
@@ -193,39 +194,44 @@
        casas no suelen ofrecer. */
 
     // Jugadores: solo sobre la línea real de la casa, promediando el modelo con lo que dicen sus cuotas.
-    /* Yardas de jugadores. Sus líneas se bajan en las 24 horas previas al inicio, cuando ya salió el parte
-       final de lesiones (el día anterior al partido). Solo reciben pick los jugadores que la casa ofrece y
-       que no figuran en el parte como fuera, dudosos ni en duda; como los picks se rehacen cada 20 minutos
-       con el parte actualizado, si alguien pasa a estar fuera antes de que queden fijos, su pick se cae.
-       Además el jugador debe tener rol fijo: jugó 3 de los 4 últimos partidos del equipo y promedia el
-       uso mínimo (25 pases, 10 acarreos o 4 objetivos por partido). Si el parte final del equipo aún no
-       está publicado en los datos, sus jugadores esperan.
-       La probabilidad del modelo se calibra (factor 0.7, ajustado con 2023-2024): así, los picks de 65% o
-       más acertaron 70.3% en 2023-2024 y 69.2% en 2025, que no se usó para ajustar. */
-    var R2 = ctx.lineas && ctx.lineas[p.id];
-    if (R2 && R2.confirmado && R2.jug) {
-      var hora = new Date(R2.confirmado), antes = Math.round(((inicio(p) || hora) - hora) / 60000);
-      var parteSem = parte(ctx.lesiones, p);
+    /* Yardas de jugadores. Se proponen desde que el partido entra en la semana, con la información de ese
+       momento, y se revisan cada 20 minutos hasta quedar fijos 10 minutos antes del inicio:
+       · Línea: hasta que se bajan las líneas reales de la casa (24 horas antes) se usa una línea estimada,
+         la mediana de sus últimos 10 partidos, que es como suelen fijarla las casas; después, la real, y
+         si la casa no ofrece al jugador, su pick se cae.
+       · Disponibilidad, según el último parte (2023-2025, jugadores con rol): sin estado y entrenando
+         jugó el 93%; en duda, 47-81%; sin estado pero sin entrenar por lesión, 33%; dudoso o fuera, 0-8%.
+         Por eso no reciben pick los que están en duda, dudosos, fuera o sin entrenar por lesión.
+       · Rol fijo: 3 de los 4 últimos partidos del equipo y 25 pases, 10 acarreos o 4 objetivos por partido.
+       · Probabilidad calibrada (factor 0.7, ajustado con 2023-2024): con esa línea estimada, los de 65% o
+         más acertaron 70.3% en 2023-2024 y 69.2% en 2025, que no se usó para ajustar. */
+    var R2 = ctx.lineas && ctx.lineas[p.id], conLineas = !!(R2 && R2.confirmado && R2.jug);
+    if (!p.jugado || reconstruir) {
+      var hora = conLineas ? new Date(R2.confirmado) : null, antes = hora ? Math.round(((inicio(p) || hora) - hora) / 60000) : 0;
+      var ENTRENO = { FP: 'entrenó completo', LP: 'entrenó limitado', NPd: 'descansó en el entrenamiento', FPd: 'entrenó completo', LPd: 'entrenó limitado' };
       [['v', p.visita], ['l', p.local]].forEach(function (x) {
-        // Sin parte final del equipo (con estados de juego) todavía no hay picks de sus jugadores.
-        if (!parteSem || !parteSem[x[1]]) return;
         var semanasEq = Object.keys(ctx.semanas[x[1]] || {}).map(Number).filter(function (s) { return s < p.semana; }).sort(function (a, b) { return b - a; }).slice(0, 4);
         jugadoresDe(ctx, p, x[0], reconstruir).forEach(function (j) {
-          var reales = R2.jug[normalizar(j.j.n)];
-          if (!reales) return;
+          if (j.duda || j.entreno === 'NP') return; // en duda o sin entrenar por lesión: puede no jugar
+          var reales = conLineas ? R2.jug[normalizar(j.j.n)] : null;
+          if (conLineas && !reales) return; // la casa no lo ofrece: no se apuesta por él
           var temp = j.j.j.filter(function (g) { return g[0] === p.temporada && g[1] < p.semana; });
           var jugo = semanasEq.filter(function (s) { return temp.some(function (g) { return g[1] === s; }); }).length;
           if (temp.length < 3 || jugo < 3) return;
           Object.keys(HITOS).forEach(function (k) {
-            if (!j.pr[k] || !reales[k]) return;
+            if (!j.pr[k] || (conLineas && !reales[k])) return;
             var uso = temp.reduce(function (a, g) { return a + g[HITOS[k].uso]; }, 0) / temp.length;
             if (uso < HITOS[k].usoMin) return;
-            var rl = reales[k], q = 0.5 + (M.probAlMenos(j.pr[k].m, j.pr[k].sd, Math.floor(rl.l) + 1) - 0.5) * CALIBRA_JUGADOR, arriba = q >= 0.5;
-            if (j.duda) return; // en duda: puede no jugar y, si juega, rinde por debajo de lo proyectado
-            var logrados = j.previos.filter(function (g) { return arriba ? g[HITOS[k].col] > rl.l : g[HITOS[k].col] < rl.l; }).length;
-            poner('jug', j.eq, j.j.n, (arriba ? 'más de ' : 'menos de ') + rl.l + ' ' + HITOS[k].nombre, Math.max(q, 1 - q), { m: 'yardas', id: j.j.id, est: k, linea: rl.l, mas: arriba },
-              { duda: j.duda, cuotaReal: arriba ? rl.mas : rl.menos,
-                resp: 'línea bajada ' + (antes >= 120 ? Math.round(antes / 60) + ' h' : antes + ' min') + ' antes del inicio · sin restricciones en el parte de lesiones · ' + HITOS[k].usoTexto(uso) + ' · jugó ' + jugo + ' de los 4 últimos · lo logró en ' + logrados + ' de sus últimos ' + j.previos.length });
+            var linea, cuotas = null;
+            if (conLineas) { linea = reales[k].l; cuotas = reales[k]; }
+            else { var ys = j.previos.map(function (g) { return g[HITOS[k].col]; }).sort(function (a, b) { return a - b; }); linea = Math.floor(ys[Math.floor(ys.length / 2)]) + 0.5; }
+            var q = 0.5 + (M.probAlMenos(j.pr[k].m, j.pr[k].sd, Math.floor(linea) + 1) - 0.5) * CALIBRA_JUGADOR, arriba = q >= 0.5;
+            var logrados = j.previos.filter(function (g) { return arriba ? g[HITOS[k].col] > linea : g[HITOS[k].col] < linea; }).length;
+            var dispo = j.entreno ? ENTRENO[j.entreno] || 'sin restricciones en el parte' : 'no figura en el parte de lesiones';
+            poner('jug', j.eq, j.j.n, (arriba ? 'más de ' : 'menos de ') + linea + ' ' + HITOS[k].nombre, Math.max(q, 1 - q), { m: 'yardas', id: j.j.id, est: k, linea: linea, mas: arriba },
+              { cuotaReal: cuotas ? (arriba ? cuotas.mas : cuotas.menos) : null, linea: { estimada: !conLineas },
+                resp: (conLineas ? 'línea de la casa, bajada ' + (antes >= 120 ? Math.round(antes / 60) + ' h' : antes + ' min') + ' antes del inicio' : 'línea estimada (mediana de sus últimos ' + j.previos.length + ')') +
+                  ' · ' + dispo + ' · ' + HITOS[k].usoTexto(uso) + ' · jugó ' + jugo + ' de los 4 últimos · lo logró en ' + logrados + ' de sus últimos ' + j.previos.length });
           });
         });
       });
@@ -265,7 +271,7 @@
     lt.forEach(function (l) { var t = M.totales(sim, l); ct.push({ linea: l, prob: t.mas / (1 - t.nulo || 1), cuota: R ? R.ts.mas[l] : null }); });
     var bt = elegir(ct);
     if (bt) c.push({ tipo: 'total', eq: null, quien: 'Más de ' + bt.linea, que: 'puntos en el partido', prob: bt.prob, m: { m: 'total', mas: true, linea: bt.linea }, cuotaReal: bt.cuota, linea: { estimada: !R } });
-    (principales || []).forEach(function (k) { if (k.tipo === 'jug' && enRango(k.prob) && k.cuotaReal >= RIESGO_CUOTA) c.push(k); });
+    (principales || []).forEach(function (k) { if (k.tipo === 'jug' && enRango(k.prob) && (!k.cuotaReal || k.cuotaReal >= RIESGO_CUOTA)) c.push(k); });
     c.sort(function (a, b) { return a.cuotaReal && b.cuotaReal ? b.prob * b.cuotaReal - a.prob * a.cuotaReal : b.prob - a.prob; });
     return c.slice(0, RIESGO_CUANTOS);
   }

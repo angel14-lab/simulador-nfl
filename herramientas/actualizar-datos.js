@@ -80,11 +80,16 @@ async function guardarJugadores(ultima, datos) {
       epa[r.game_id + '|' + alias(r.team)] = ((Number(r.passing_epa) || 0) + (Number(r.rushing_epa) || 0)).toFixed(2);
     });
     M.leerCSV(await leer(`inj_${a}.csv`, `${PUBLICADOS}injuries/injuries_${a}.csv`, !viejo)).forEach(r => {
-      if (!r.report_status) return;
+      if (!r.report_status && !r.practice_status) return;
       const equipo = alias(r.team), semana = Number(r.week);
       if (a === ultima && r.date_modified && r.date_modified > (modificado[semana] || '')) modificado[semana] = r.date_modified;
+      // Parte de la temporada en curso: estado de juego (desde el día anterior) y último entrenamiento
+      // (desde mitad de semana: NP no entrenó, LP limitado, FP completo; d = día de descanso, no lesión).
+      const pr = /Did Not/i.test(r.practice_status) ? 'NP' : /Limited/i.test(r.practice_status) ? 'LP' : /Full/i.test(r.practice_status) ? 'FP' : '';
       if (a === ultima) ((parte[semana] = parte[semana] || {})[equipo] = parte[semana][equipo] || [])
-        .push({ n: r.full_name, p: r.position, e: r.report_status, l: r.report_primary_injury });
+        .push(Object.assign({ n: r.full_name, p: r.position, e: r.report_status || '', l: r.report_primary_injury || r.practice_primary_injury || '' }, pr ? { pr } : {},
+          /^Not injury related/i.test(r.practice_primary_injury || r.report_primary_injury || '') ? { d: 1 } : {}));
+      if (!r.report_status) return;
       if ((r.report_status !== 'Out' && r.report_status !== 'Doubtful') || NO_CUENTA.includes(r.position)) return;
       const b = bajas[a + '|' + semana + '|' + equipo] = bajas[a + '|' + semana + '|' + equipo] || [0, 0, 0];
       b[ATAQUE.includes(r.position) ? 0 : LINEA.includes(r.position) ? 1 : 2]++;
