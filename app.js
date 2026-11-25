@@ -411,12 +411,20 @@
 
   // ---------- vista: mejores picks de la jornada ----------
   function vistaPicks() {
-    var todos = [];
-    partidosDeJornada().forEach(function (p) { if (iniciado(p)) return; pronostico(p).top.forEach(function (k) { todos.push(k); }); });
+    var todos = [], riesgo = [];
+    partidosDeJornada().forEach(function (p) {
+      if (iniciado(p)) return;
+      var r = pronostico(p);
+      r.top.forEach(function (k) { todos.push(k); });
+      r.riesgo.forEach(function (k) { k.riesgo = true; riesgo.push(k); });
+    });
+    riesgo.sort(function (a, b) { return b.prob - a.prob; });
     todos.sort(function (a, b) { return b.prob - a.prob; });
     var ver = todos.slice(0, 40);
     vista.innerHTML = cabecera('Mejores picks') +
-      (ver.length ? '<div class="panel"><ol class="picks">' + ver.map(function (k, i) { return filaPick(k, i, true); }).join('') + '</ol></div>' +
+      (ver.length ? '<div class="d-picks"><div class="panel"><h3>Más probables</h3><ol class="picks">' + ver.map(function (k, i) { return filaPick(k, i, true); }).join('') + '</ol></div>' +
+        '<div class="panel riesgo"><h3>Arriesgados</h3><ol class="picks">' + riesgo.slice(0, 20).map(function (k, i) { return filaPick(k, i, true); }).join('') + '</ol>' +
+        '<p class="nota">De ' + pct(P.RIESGO_MIN) + ' a ' + pct(P.RIESGO_MAX) + ' y pagan ' + P.RIESGO_CUOTA.toFixed(2) + ' o más. En 2016-2025 acertaron 58%.</p></div></div>' +
         '<p class="nota">Los ' + ver.length + ' más probables entre los partidos que faltan. Los picks de un mismo partido están relacionados: si el partido sale distinto de lo esperado, suelen fallar varios a la vez.</p>' :
         '<p class="vacio">No quedan partidos por empezar en esta jornada.</p>');
     activarCabecera();
